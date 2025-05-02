@@ -1,4 +1,5 @@
 const SIMILARITY_THRESHOLD = 0.6; // Threshold for considering items similar enough
+const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour in milliseconds
 
 function normalizeBottleName(name) {
   if (!name) return '';
@@ -140,6 +141,19 @@ async function searchBaxusListings(normalizedQueryName) {
         console.log(`[Honey Barrel BG] Found ${processedListings.length} listings passing similarity threshold and sorted.`);
         // --- End Commit 8 ---
 
+        // --- Start Commit 9: Caching ---
+        if (processedListings.length > 0) {
+          const cacheKey = 'baxus_search_' + normalizedQueryName;
+          const dataToCache = { results: processedListings, timestamp: Date.now() };
+          try {
+            await chrome.storage.local.set({ [cacheKey]: dataToCache });
+            console.log(`[Honey Barrel BG] Cached ${processedListings.length} results for key: ${cacheKey}`);
+          } catch (error) {
+            console.error(`[Honey Barrel BG] Error caching results for key ${cacheKey}:`, error);
+          }
+        }
+        // --- End Commit 9 ---
+
         // Return the filtered and sorted listings
         return processedListings;
     } else {
@@ -206,6 +220,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Use an IIFE (Immediately Invoked Function Expression) to handle the async operation
     // This allows the main listener function to return `true` immediately.
     (async () => {
+      // --- Start Commit 9: Cache Check ---
+      const cacheKey = 'baxus_search_' + normalizedName;
+      try {
+        const cachedData = await chrome.storage.local.get(cacheKey);
+        if (cachedData[cacheKey] && (Date.now() - cachedData[cacheKey].timestamp < CACHE_DURATION_MS)) {
+          console.log(`[Honey Barrel BG] Using cached results for key: ${cacheKey}`);
+          sendResponse({ matches: cachedData[cacheKey].results });
+          return; // Return early as we sent the cached response
+        } else {
+           console.log(`[Honey Barrel BG] No valid cache found for key: ${cacheKey}. Fetching fresh data.`);
+        }
+      } catch (error) {
+        console.error(`[Honey Barrel BG] Error retrieving cache for key ${cacheKey}:`, error);
+        // Proceed to fetch fresh data if cache retrieval fails
+      }
+      // --- End Commit 9 ---
+
       console.log(`[Honey Barrel BG] Calling async searchBaxusListings for normalized name: "${normalizedName}"`);
       const results = await searchBaxusListings(normalizedName); // Pass normalizedName
       console.log('[Honey Barrel BG] Sending search results back to popup:', results);
