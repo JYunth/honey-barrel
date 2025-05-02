@@ -166,6 +166,11 @@ const siteConfigs = {
     name: 'qualityliquorstore.com',
     titleSelector: 'h1.product-title.h5',
     priceSelector: 'strong.price__current',
+  },
+  'www.reservebar.com': { // Match hostname including www
+    name: 'reservebar.com', // Display name without www
+    titleSelector: 'h1[data-sentry-component="Typography"]',
+    priceSelector: 'h3[data-sentry-component="Typography"]',
   }
   // Add more site configurations here as needed
 };
