@@ -35,13 +35,37 @@ Imagine browsing your favorite online liquor store. With Honey Barrel installed,
 
 ## Supported Websites
 
-*   wine.com
-*   spiritory.com
-*   caskcartel.com
-*   whisky.auction
-*   caskers.com
-*   baxus.co
-*   *(More coming soon!)*
+Honey Barrel currently supports price extraction from the following websites, spanning spirit sellers and p2p marketplaces across the US, UK and EU:
+
+| Site Name                  | URL Example                     | Notes                               |
+| -------------------------- | ------------------------------- | ----------------------------------- |
+| wine.com                   | `https://www.wine.com`          |                                     |
+| spiritory.com              | `https://spiritory.com`         |                                     |
+| caskcartel.com             | `https://caskcartel.com`        |                                     |
+| whisky.auction             | `https://whisky.auction`        |                                     |
+| caskers.com                | `https://www.caskers.com`       |                                     |
+| baxus.co                   | `https://www.baxus.co`          |                                     |
+| uptownspirits.com          | `https://uptownspirits.com`     | Handles INR (₹)                     |
+| qualityliquorstore.com     | `https://qualityliquorstore.com`|                                     |
+| reservebar.com             | `https://www.reservebar.com`    |                                     |
+| eu.flaviar.com             | `https://eu.flaviar.com`        | Handles EUR (€)                     |
+| totalwine.com              | `https://www.totalwine.com`     |                                     |
+| bevmo.com                  | `https://www.bevmo.com`         | May extract regular (<s>) price     |
+| klwines.com                | `https://shop.klwines.com`      |                                     |
+| astorwines.com             | `https://www.astorwines.com`    |                                     |
+| masterofmalt.com           | `https://www.masterofmalt.com`  | Handles GBP (£)                     |
+| thewhiskyexchange.com      | `https://www.thewhiskyexchange.com` | Handles GBP (£)                     |
+| 365drinks.co.uk            | `https://www.365drinks.co.uk`   | Handles GBP (£)                     |
+| threshers.co.uk            | `https://www.threshers.co.uk`   | Handles GBP (£)                     |
+| majestic.co.uk             | `https://www.majestic.co.uk`    | Handles GBP (£)                     |
+| laithwaites.com            | `https://www.laithwaites.com`   | Price selector might be generic     |
+| whiskyauctioneer.com       | `https://whiskyauctioneer.com`  | Handles GBP (£)                     |
+| scotchwhiskyauctions.com   | `https://www.scotchwhiskyauctions.com` | Handles GBP (£), "Winning bid:" |
+| just-whisky.co.uk          | `https://www.just-whisky.co.uk` | Handles GBP (£)                     |
+| thegrandwhiskyauction.com  | `https://www.thegrandwhiskyauction.com` | Handles "US$" prefix              |
+| htfw.com                   | `https://www.htfw.com`          | Handles GBP (£)                     |
+
+*(More coming soon!)*
 
 ## Technical Peek
 
