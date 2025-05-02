@@ -32,11 +32,24 @@
     "*://*.reservebar.com/*",
     "*://eu.flaviar.com/*",
     "*://*.totalwine.com/*",
-    "*://*.bevmo.com/*"
+    "*://*.bevmo.com/*",
+    "*://shop.klwines.com/*",
+    "*://*.astorwines.com/*",
+    "*://*.masterofmalt.com/*",
+    "*://*.thewhiskyexchange.com/*",
+    "*://*.365drinks.co.uk/*",
+    "*://*.threshers.co.uk/*",
+    "*://*.majestic.co.uk/*",
+    "*://*.laithwaites.com/*",
+    "*://*.whiskyauctioneer.com/*",
+    "*://*.scotchwhiskyauctions.com/*",
+    "*://*.just-whisky.co.uk/*",
+    "*://*.thegrandwhiskyauction.com/*",
+    "*://*.htfw.com/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.wine.com/*", "*://*.spiritory.com/*", "*://*.caskcartel.com/*", "*://*.whisky.auction/*", "*://*.caskers.com/*", "*://*.baxus.co/*", "*://*.uptownspirits.com/*", "*://*.qualityliquorstore.com/*", "*://*.reservebar.com/*", "*://eu.flaviar.com/*", "*://*.totalwine.com/*", "*://*.bevmo.com/*"],
+      "matches": ["*://*.wine.com/*", "*://*.spiritory.com/*", "*://*.caskcartel.com/*", "*://*.whisky.auction/*", "*://*.caskers.com/*", "*://*.baxus.co/*", "*://*.uptownspirits.com/*", "*://*.qualityliquorstore.com/*", "*://*.reservebar.com/*", "*://eu.flaviar.com/*", "*://*.totalwine.com/*", "*://*.bevmo.com/*", "*://shop.klwines.com/*", "*://*.astorwines.com/*", "*://*.masterofmalt.com/*", "*://*.thewhiskyexchange.com/*", "*://*.365drinks.co.uk/*", "*://*.threshers.co.uk/*", "*://*.majestic.co.uk/*", "*://*.laithwaites.com/*", "*://*.whiskyauctioneer.com/*", "*://*.scotchwhiskyauctions.com/*", "*://*.just-whisky.co.uk/*", "*://*.thegrandwhiskyauction.com/*", "*://*.htfw.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

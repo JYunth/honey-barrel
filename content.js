@@ -186,6 +186,71 @@ const siteConfigs = {
     name: 'bevmo.com',
     titleSelector: 'h1',
     priceSelector: 's.price-item.price-item--regular', // Note: Selects the strikethrough price
+  },
+  'shop.klwines.com': { // Keep subdomain
+    name: 'klwines.com', // Display name without subdomain
+    titleSelector: 'h1.MuiTypography-root.MuiTypography-h1',
+    priceSelector: 'data.MuiTypography-root.MuiTypography-body1',
+  },
+  'astorwines.com': {
+    name: 'astorwines.com',
+    titleSelector: 'h1.page-title',
+    priceSelector: 'span.price-value.price-bottle',
+  },
+  'masterofmalt.com': {
+    name: 'masterofmalt.com',
+    titleSelector: 'h1#ContentPlaceHolder1_ProductTitle',
+    priceSelector: 'span#ContentPlaceHolder1_ProductPrice',
+  },
+  'thewhiskyexchange.com': {
+    name: 'thewhiskyexchange.com',
+    titleSelector: 'h1.product-main__name',
+    priceSelector: 'p.product-action__price',
+  },
+  '365drinks.co.uk': {
+    name: '365drinks.co.uk',
+    titleSelector: 'h1.title[itemprop="name"]',
+    priceSelector: 'span.money',
+  },
+  'threshers.co.uk': {
+    name: 'threshers.co.uk',
+    titleSelector: 'h1.product-single__title',
+    priceSelector: 'span[aria-hidden="true"]', // Target the span containing the price
+  },
+  'majestic.co.uk': {
+    name: 'majestic.co.uk',
+    titleSelector: 'h1.product-info__name',
+    priceSelector: 'span.product-action__price-text',
+  },
+  'laithwaites.com': {
+    name: 'laithwaites.com',
+    titleSelector: 'h1.main-title.law',
+    priceSelector: 'span', // Note: Generic selector, might need refinement
+  },
+  'whiskyauctioneer.com': {
+    name: 'whiskyauctioneer.com',
+    titleSelector: 'h1',
+    priceSelector: 'span.uc-price',
+  },
+  'scotchwhiskyauctions.com': {
+    name: 'scotchwhiskyauctions.com',
+    titleSelector: 'h1',
+    priceSelector: 'p.bidinfo.won', // Handles "Winning bid: £40"
+  },
+  'just-whisky.co.uk': {
+    name: 'just-whisky.co.uk',
+    titleSelector: 'div.Text_h2__HFuuG.mb-5',
+    priceSelector: 'div.ProductBidInfo_bidPrice__UFx59',
+  },
+  'thegrandwhiskyauction.com': {
+    name: 'thegrandwhiskyauction.com',
+    titleSelector: 'h1',
+    priceSelector: 'span.USD.show', // Handles "US$13,352.00"
+  },
+  'htfw.com': {
+    name: 'htfw.com',
+    titleSelector: 'h1',
+    priceSelector: 'span.price', // Handles nested superscript
   }
   // Add more site configurations here as needed
 };
