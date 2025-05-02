@@ -171,6 +171,11 @@ const siteConfigs = {
     name: 'reservebar.com', // Display name without www
     titleSelector: 'h1[data-sentry-component="Typography"]',
     priceSelector: 'h3[data-sentry-component="Typography"]',
+  },
+  'eu.flaviar.com': {
+    name: 'eu.flaviar.com',
+    titleSelector: 'h1',
+    priceSelector: 'div.item-price-main',
   }
   // Add more site configurations here as needed
 };
