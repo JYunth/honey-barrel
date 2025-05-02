@@ -6,6 +6,18 @@ function normalizeBottleName(name) {
     .replace(/\s+/g, ' ') // Normalize spaces
     .trim();
 }
+// Debounce function to limit how often a function can run
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
 /**
  * Configuration object holding selectors for different supported sites.
  */
@@ -176,20 +188,46 @@ function extractProductInfoWithPolling(config) {
   }
 }
 
-// --- Main Execution ---
-const currentSiteConfig = getSiteConfig();
-if (currentSiteConfig) {
-  console.log("Honey Barrel: Configuration found. Waiting 3 seconds before extracting info...");
-  // Wait 3 seconds after document_idle before attempting extraction
-  setTimeout(() => {
-    console.log("Honey Barrel: 3-second delay complete. Starting info extraction.");
-    // Use the polling function
-    extractProductInfoWithPolling(currentSiteConfig);
-  }, 3000); // 3000 milliseconds = 3 seconds
-} else {
-  console.log("Honey Barrel: No configuration found for this site.");
+// --- Function to Trigger Extraction ---
+function runExtraction() {
+    const currentSiteConfig = getSiteConfig();
+    if (currentSiteConfig) {
+        console.log("Honey Barrel: runExtraction triggered. Waiting 3 seconds before extracting info...");
+        // Wait 3 seconds after trigger before attempting extraction
+        // This delay helps ensure dynamic content has loaded after navigation
+        setTimeout(() => {
+            console.log("Honey Barrel: 3-second delay complete. Starting info extraction.");
+            extractProductInfoWithPolling(currentSiteConfig);
+        }, 3000); // 3000 milliseconds = 3 seconds
+    } else {
+        console.log("Honey Barrel: No configuration found for this site. Extraction aborted.");
+    }
 }
 
+// --- Initial Execution ---
+runExtraction(); // Run once on initial load
+
+// --- Mutation Observer for SPA/Dynamic Content ---
+const debouncedRunExtraction = debounce(runExtraction, 1500); // Debounce extraction calls by 1.5 seconds
+
+const observer = new MutationObserver((mutationsList, observer) => {
+    // We don't need to inspect mutationsList in detail for this simple case.
+    // Any significant DOM change *might* be a navigation.
+    // Debouncing prevents excessive calls.
+    console.log("Honey Barrel: MutationObserver detected DOM change. Debouncing extraction trigger...");
+    debouncedRunExtraction();
+});
+
+// Start observing the body for changes in the subtree and child list
+// Adjust target node and config if needed for specific sites, but body is a good general start
+const targetNode = document.body;
+if (targetNode) {
+    const config = { childList: true, subtree: true };
+    observer.observe(targetNode, config);
+    console.log("Honey Barrel: MutationObserver started watching document body.");
+} else {
+    console.error("Honey Barrel: Could not find document body to observe.");
+}
 // --- Overlay Function ---
 function createComparisonOverlay(matches, bottleInfo) {
     // Remove existing overlay first
