@@ -144,8 +144,13 @@ function extractProductInfoWithPolling(config) {
 // --- Main Execution ---
 const currentSiteConfig = getSiteConfig();
 if (currentSiteConfig) {
-  // Use the polling function
-  extractProductInfoWithPolling(currentSiteConfig);
+  console.log("Honey Barrel: Configuration found. Waiting 3 seconds before extracting info...");
+  // Wait 3 seconds after document_idle before attempting extraction
+  setTimeout(() => {
+    console.log("Honey Barrel: 3-second delay complete. Starting info extraction.");
+    // Use the polling function
+    extractProductInfoWithPolling(currentSiteConfig);
+  }, 3000); // 3000 milliseconds = 3 seconds
 } else {
   console.log("Honey Barrel: No configuration found for this site.");
 }
@@ -154,11 +159,15 @@ if (currentSiteConfig) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  console.log("Honey Barrel (content): Received message:", request);
  if (request.type === 'GET_BOTTLE_INFO') {
-   console.log("Honey Barrel (content): Sending response:", { bottleName: lastBottleName, bottlePrice: lastBottlePrice });
-   // Respond with the last known bottle info
+   // Re-parse the stored raw price to create the structured priceInfo object
+   const priceInfo = parsePrice(lastBottlePrice);
+   console.log("Honey Barrel (content): Sending response:", { bottleInfo: { name: lastBottleName, priceInfo: priceInfo } });
+   // Respond with the last known bottle info in the structure popup.js expects
    sendResponse({
-     bottleName: lastBottleName,
-     bottlePrice: lastBottlePrice // Send the raw price string
+       bottleInfo: {
+           name: lastBottleName,
+           priceInfo: priceInfo // Send the parsed price info object
+       }
    });
    // Return true to indicate you wish to send a response asynchronously
    // (although in this simple case it's synchronous, it's good practice)

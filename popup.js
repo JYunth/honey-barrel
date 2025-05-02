@@ -1,48 +1,94 @@
 document.addEventListener('DOMContentLoaded', function() {
   const matchesListElement = document.getElementById('matchesList');
+  let currentPrice = null; // Variable to store the price from the current page
 
   if (!matchesListElement) {
-    console.error("Could not find #matchesList element in popup.html");
+    console.error("[Honey Barrel Popup] Could not find #matchesList element in popup.html");
     return; // Stop if the essential element is missing
   }
 
-  console.log("[Honey Barrel Popup] Requesting matches from background script...");
-  matchesListElement.textContent = 'Loading matches...'; // Initial state
+  matchesListElement.textContent = 'Getting bottle info from page...'; // Initial state
 
-  // Send a message directly to the background script
-  chrome.runtime.sendMessage({ type: 'SEARCH_BOTTLE' }, function(response) {
+  // Step 1: Get bottle info from the content script
+  chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
     if (chrome.runtime.lastError) {
-      console.error("Error sending/receiving message from background:", chrome.runtime.lastError.message);
-      matchesListElement.textContent = 'Error loading matches. Is the background script running?';
+      console.error("[Honey Barrel Popup] Error querying tabs:", chrome.runtime.lastError.message);
+      matchesListElement.textContent = 'Error contacting page.';
       return;
     }
-
-    console.log("[Honey Barrel Popup] Received response from background:", response);
-
-    // Clear loading message
-    matchesListElement.innerHTML = ''; // Use innerHTML to clear content
-
-    if (response && response.matches && Array.isArray(response.matches)) {
-      const matches = response.matches;
-
-      if (matches.length > 0) {
-        console.log(`[Honey Barrel Popup] Displaying ${matches.length} matches.`);
-        const list = document.createElement('ul');
-        matches.forEach(match => {
-          const listItem = document.createElement('li');
-          // Display name and price (ensure price is formatted)
-          const priceString = typeof match.price === 'number' ? `$${match.price.toFixed(2)}` : 'Price N/A';
-          listItem.textContent = `${match.name} - ${priceString}`;
-          list.appendChild(listItem);
-        });
-        matchesListElement.appendChild(list);
-      } else {
-        console.log("[Honey Barrel Popup] No matches found.");
-        matchesListElement.textContent = 'No matches found.';
-      }
-    } else {
-      console.error("[Honey Barrel Popup] Invalid response format received from background:", response);
-      matchesListElement.textContent = 'Failed to get matches (invalid response).';
+    if (!tabs || tabs.length === 0) {
+        console.error("[Honey Barrel Popup] No active tab found.");
+        matchesListElement.textContent = 'Could not find active tab.';
+        return;
     }
+
+    const activeTabId = tabs[0].id;
+    console.log(`[Honey Barrel Popup] Sending 'GET_BOTTLE_INFO' to tab ${activeTabId}`);
+
+    chrome.tabs.sendMessage(activeTabId, { type: 'GET_BOTTLE_INFO' }, function(response) {
+      if (chrome.runtime.lastError) {
+        console.error("[Honey Barrel Popup] Error receiving bottle info from content script:", chrome.runtime.lastError.message);
+        matchesListElement.textContent = 'Could not get info from this page. Is it supported?';
+        // Common error: "Could not establish connection. Receiving end does not exist."
+        // This often means the content script hasn't been injected or the page is restricted (e.g., chrome:// pages)
+        if (chrome.runtime.lastError.message.includes("Receiving end does not exist")) {
+             matchesListElement.textContent += ' (Content script not available on this page).';
+        }
+        return;
+      }
+
+      console.log("[Honey Barrel Popup] Received response from content script:", response);
+
+      if (response && response.bottleInfo && response.bottleInfo.name) {
+        const bottleName = response.bottleInfo.name;
+        // Store the price if available
+        currentPrice = response.bottleInfo.priceInfo?.value;
+        console.log(`[Honey Barrel Popup] Got bottle name: "${bottleName}", Price: ${currentPrice ?? 'N/A'}. Requesting search from background...`);
+        matchesListElement.textContent = `Searching Baxus for "${bottleName}"...`;
+
+        // Step 2: Send search request to the background script with the bottle name
+        chrome.runtime.sendMessage({ type: 'SEARCH_BOTTLE', bottleName: bottleName }, function(searchResponse) {
+          if (chrome.runtime.lastError) {
+            console.error("[Honey Barrel Popup] Error receiving search results from background:", chrome.runtime.lastError.message);
+            matchesListElement.textContent = 'Error getting search results.';
+            return;
+          }
+
+          console.log("[Honey Barrel Popup] Received search response from background:", searchResponse);
+          matchesListElement.innerHTML = ''; // Clear loading message
+
+          if (searchResponse && searchResponse.matches && Array.isArray(searchResponse.matches)) {
+            const matches = searchResponse.matches; // These are the _source objects
+
+            if (matches.length > 0) {
+              console.log(`[Honey Barrel Popup] Displaying ${matches.length} matches.`);
+              // TODO: Display currentPrice alongside matches later
+              const list = document.createElement('ul');
+              matches.forEach(match => { // match is the _source object
+                const listItem = document.createElement('li');
+                // Access data directly from the _source object
+                const name = match.name || 'Name N/A';
+                const price = match.price;
+                const priceString = typeof price === 'number' ? `$${price.toFixed(2)}` : 'Price N/A';
+                listItem.textContent = `${name} - ${priceString}`;
+                // You can add more details here later, e.g., match.imageUrl
+                list.appendChild(listItem);
+              });
+              matchesListElement.appendChild(list);
+            } else {
+              console.log("[Honey Barrel Popup] No matches found from background search.");
+              matchesListElement.textContent = `No Baxus matches found for "${bottleName}".`;
+            }
+          } else {
+            console.error("[Honey Barrel Popup] Invalid search response format received from background:", searchResponse);
+            matchesListElement.textContent = 'Failed to get matches (invalid response).';
+          }
+        });
+
+      } else {
+        console.log("[Honey Barrel Popup] No valid bottle info received from content script.");
+        matchesListElement.textContent = 'Could not identify a bottle on this page.';
+      }
+    });
   });
 });
