@@ -122,27 +122,41 @@ function createMatchItem(match, currentPrice) {
     // Removed SVG from no-matches
   }
 
-  // Function to update popup status
+  // Function to update popup status and loading bar
   function updateStatus(message, type = 'loading') {
     const statusElement = document.querySelector('.status');
+    const loadingContainer = document.querySelector('.loading-container');
+    const matchesContainer = document.querySelector('.matches'); // Get matches container
+
     statusElement.textContent = message;
-    statusElement.className = `status ${type}`;
+    // Use more specific classes for styling based on type
+    statusElement.className = `status status-${type}`;
+
+    if (type === 'loading') {
+      loadingContainer.style.display = 'block'; // Show loading bar
+      matchesContainer.style.display = 'none'; // Hide matches while loading
+    } else {
+      loadingContainer.style.display = 'none'; // Hide loading bar
+      matchesContainer.style.display = 'block'; // Show matches container
+      if (type === 'no_matches') {
+        // Special handling for no_matches: show the message but keep matches container visible for the "No matches" div
+        statusElement.className = `status status-error`; // Use error styling for no_matches message
+      }
+    }
   }
 
   // Function to update popup content
   function updatePopupContent(matches, currentPrice) {
     const matchesContainer = document.querySelector('.matches');
-
-    // Removed hiding loading indicator as it doesn't exist
+    matchesContainer.innerHTML = ''; // Clear previous matches or "no matches" message
 
     if (!matches || matches.length === 0) {
-      updateStatus('No matches found', 'error'); // Keep error status text
-      showNoMatches();
+      updateStatus('No matches found on BAXUS.', 'no_matches'); // Use specific type
+      showNoMatches(); // Display the dedicated "no matches" element
       return;
     }
 
     updateStatus(`Found ${matches.length} matching bottle${matches.length > 1 ? 's' : ''}`, 'success');
-    matchesContainer.innerHTML = '';
 
     // Add each match with a slight delay for animation
     matches.forEach((match, index) => {
@@ -153,57 +167,81 @@ function createMatchItem(match, currentPrice) {
   }
 
   // Function to handle errors
-  function handleError(message) {
-    updateStatus(message || 'An error occurred', 'error'); // Keep error status text
-    // Removed hiding loading indicator as it doesn't exist
-    showNoMatches();
+  function handleError(message, errorType = 'general') {
+    let displayMessage = 'An error occurred.';
+    if (message) {
+        displayMessage = message;
+    } else if (errorType === 'tab_access') {
+        displayMessage = 'Error: Could not access the current tab.';
+    } else if (errorType === 'info_fetch') {
+        displayMessage = 'Error: Failed to get page information.';
+    } else if (errorType === 'no_info') {
+        displayMessage = 'Error: No bottle information detected on this page.';
+    } else if (errorType === 'search_fail') {
+        displayMessage = 'Error: Failed to search for matches.';
+    } else if (errorType === 'invalid_name') {
+        displayMessage = 'Error: Could not determine a valid name for search.';
+    }
+
+    console.error(`handleError (${errorType}):`, message); // Log original message too
+    updateStatus(displayMessage, 'error');
+    showNoMatches(); // Show the "no matches" area to indicate failure state visually
   }
 
   // Execute when popup loads
   document.addEventListener('DOMContentLoaded', function() {
     console.log("Popup opened");
-    updateStatus('Checking current page...', 'loading');
+    updateStatus('Checking current page...', 'loading'); // Initial loading state
 
     // Query the active tab to get current bottle information
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
       const activeTab = tabs[0];
-      console.log("Active tab:", activeTab.url);
 
-      if (!activeTab || !activeTab.id) { // Added check for activeTab.id
-        handleError('Cannot access current tab or tab ID');
+      if (!activeTab || !activeTab.id) {
+        console.error("Cannot access current tab or tab ID");
+        handleError('Cannot access current tab or tab ID', 'tab_access');
         return;
       }
+      console.log("Active tab:", activeTab.url);
+
 
       // Request latest bottle info from background script
       console.log(`Requesting latest info for tab ${activeTab.id} from background script...`);
+      // No status update here, keep "Checking..."
+
       chrome.runtime.sendMessage({ type: 'GET_LATEST_BOTTLE_INFO', tabId: activeTab.id }, response => {
           if (chrome.runtime.lastError) {
               console.error("Error requesting info from background:", chrome.runtime.lastError.message);
-              handleError(`Error getting page info: ${chrome.runtime.lastError.message}`);
+              // Provide more specific error context
+              handleError(`Failed to communicate with background script: ${chrome.runtime.lastError.message}`, 'info_fetch');
               return;
           }
 
           console.log("Response from background script (GET_LATEST_BOTTLE_INFO):", response);
 
-          if (!response || !response.bottleInfo || !response.bottleInfo.name || !response.bottleInfo.priceInfo) {
-              handleError('No bottle detected or info not ready yet.');
+          // Check for valid response structure and essential data
+          if (!response || !response.bottleInfo || !response.bottleInfo.name || !response.bottleInfo.priceInfo || typeof response.bottleInfo.priceInfo.value !== 'number') {
+              console.warn("No valid bottle info received from background.");
+              handleError('No bottle detected or info not ready yet.', 'no_info');
               return;
           }
 
           const { name: bottleName, priceInfo } = response.bottleInfo;
-          const currentPrice = priceInfo.value; // Assuming priceInfo has { value, currency }
+          const currentPrice = priceInfo.value;
 
           console.log(`Raw bottleName from background script: "${bottleName}"`);
           const normalizedBottleName = normalizeBottleName(bottleName);
-          updateStatus(`Trying to find: ${bottleName}`, 'loading');
           console.log(`Normalized name for search: "${normalizedBottleName}"`);
 
           // Ensure normalized name is not empty before sending
           if (!normalizedBottleName) {
               console.warn("Normalized bottle name is empty. Aborting search.");
-              handleError("Could not determine a valid name for search.");
+              handleError("Could not determine a valid name for search.", 'invalid_name');
               return;
           }
+
+          // Update status before sending search request
+          updateStatus(`Searching BAXUS for: ${bottleName}`, 'loading');
 
           // Search for matches using the background script
           chrome.runtime.sendMessage(
@@ -211,17 +249,29 @@ function createMatchItem(match, currentPrice) {
               searchResponse => {
                   if (chrome.runtime.lastError) {
                       console.error("Error sending/receiving SEARCH_BOTTLE:", chrome.runtime.lastError.message);
-                      handleError(`Error searching: ${chrome.runtime.lastError.message}`);
+                      // Provide more specific error context
+                      handleError(`Error during BAXUS search: ${chrome.runtime.lastError.message}`, 'search_fail');
                       return;
                   }
 
                   console.log("Search response:", searchResponse);
-                  if (searchResponse && searchResponse.matches) {
-                      // Pass the numeric price value to updatePopupContent
+
+                  // Check if searchResponse itself is valid before accessing properties
+                  if (!searchResponse) {
+                      handleError('Received invalid response from search.', 'search_fail');
+                      return;
+                  }
+
+                  if (searchResponse.error) {
+                      // Handle errors reported by the background script's search function
+                      handleError(`Search error: ${searchResponse.error}`, 'search_fail');
+                  } else if (searchResponse.matches) {
+                      // Success: Pass the numeric price value to updatePopupContent
                       updatePopupContent(searchResponse.matches, currentPrice);
                   } else {
-                      const errorMsg = searchResponse && searchResponse.error ? searchResponse.error : 'Failed to search bottles';
-                      handleError(errorMsg);
+                      // Should ideally be covered by matches.length === 0 check in updatePopupContent,
+                      // but handle unexpected case where matches is missing without an error
+                       handleError('Unexpected search result format.', 'search_fail');
                   }
               }
           );

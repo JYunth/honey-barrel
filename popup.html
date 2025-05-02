@@ -78,6 +78,29 @@
     /* .loading-bar removed */
     /* @keyframes loading-animation removed */
 
+/* Loading Bar Styles */
+    .loading-container {
+      height: 4px; /* Height of the loading bar track */
+      background-color: var(--border-color); /* Light track color */
+      border-radius: 2px;
+      margin-bottom: 20px; /* Space below loading bar */
+      overflow: hidden; /* Ensure bar stays within container */
+      display: none; /* Hidden by default, shown by JS */
+    }
+
+    .loading-bar {
+      width: 100%;
+      height: 100%;
+      background: var(--button-bg); /* Use button color for the bar */
+      border-radius: 2px;
+      animation: loading-animation 1.5s infinite linear;
+    }
+
+    @keyframes loading-animation {
+      0% { transform: translateX(-100%); }
+      50% { transform: translateX(0%); }
+      100% { transform: translateX(100%); }
+    }
     /* Update status bar */
     .status {
       padding: 12px 16px; /* Adjust padding */
@@ -352,6 +375,10 @@
     <!-- Removed title-sub -->
   </div>
 
+<!-- Loading Indicator -->
+  <div class="loading-container" style="display: none;"> <!-- Initially hidden -->
+    <div class="loading-bar"></div>
+  </div>
   <!-- Removed loading-container -->
 
   <!-- Example Status (JS will update this) -->
