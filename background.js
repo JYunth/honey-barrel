@@ -2,6 +2,12 @@
 const DEFAULT_SIMILARITY_THRESHOLD = 0.6;
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour in milliseconds
 
+/**
+ * Normalizes a bottle name for comparison by converting to lowercase,
+ * removing special characters and common descriptive terms, and standardizing whitespace.
+ * @param {string} name - The raw bottle name.
+ * @returns {string} The normalized bottle name.
+ */
 function normalizeBottleName(name) {
   if (!name) return '';
   return name.toLowerCase()
@@ -10,6 +16,13 @@ function normalizeBottleName(name) {
     .replace(/\s+/g, ' ') // Normalize spaces
     .trim();
 }
+
+/**
+ * Generates a set of bigrams (character pairs) from a string.
+ * Used for Dice coefficient similarity calculation.
+ * @param {string} str - The input string.
+ * @returns {Set<string>} A set containing the bigrams of the string.
+ */
 function getStringBigrams(str) {
   if (!str || str.length < 2) {
     return new Set();
@@ -21,10 +34,16 @@ function getStringBigrams(str) {
   return bigrams;
 }
 
+/**
+ * Calculates the Dice coefficient similarity between two strings based on their bigrams.
+ * @param {string} str1 - The first string (normalized).
+ * @param {string} str2 - The second string (normalized).
+ * @returns {number} The Dice coefficient, a value between 0 (no similarity) and 1 (identical).
+ */
 function calculateSimilarity(str1, str2) {
   // Handle edge cases: empty strings or strings too short for bigrams
   if (!str1 || !str2 || str1.length < 2 || str2.length < 2) {
-    console.log(`[Honey Barrel BG] Similarity edge case: One or both strings too short ("${str1}", "${str2}"). Returning 0.`);
+    // console.log(`[Honey Barrel BG] Similarity edge case: One or both strings too short ("${str1}", "${str2}"). Returning 0.`); // Debug log removed
     return 0;
   }
 
@@ -33,7 +52,7 @@ function calculateSimilarity(str1, str2) {
 
   // Handle edge case: No bigrams generated (e.g., single character strings after normalization)
   if (bigrams1.size === 0 || bigrams2.size === 0) {
-     console.log(`[Honey Barrel BG] Similarity edge case: Zero bigrams for one or both strings ("${str1}", "${str2}"). Returning 0.`);
+     // console.log(`[Honey Barrel BG] Similarity edge case: Zero bigrams for one or both strings ("${str1}", "${str2}"). Returning 0.`); // Debug log removed
      return 0;
   }
 
@@ -45,7 +64,7 @@ function calculateSimilarity(str1, str2) {
   }
 
   const diceCoefficient = (2 * intersectionSize) / (bigrams1.size + bigrams2.size);
-  console.log(`[Honey Barrel BG] Calculated Dice Similarity for "${str1}" vs "${str2}": ${diceCoefficient.toFixed(3)} (Intersection: ${intersectionSize}, Set1: ${bigrams1.size}, Set2: ${bigrams2.size})`);
+  // console.log(`[Honey Barrel BG] Calculated Dice Similarity for "${str1}" vs "${str2}": ${diceCoefficient.toFixed(3)} (Intersection: ${intersectionSize}, Set1: ${bigrams1.size}, Set2: ${bigrams2.size})`); // Debug log removed
   return diceCoefficient;
 }
 
@@ -58,25 +77,25 @@ const GBP_TO_USD_RATE = 1.33; // Example: 1 GBP = 1.33 USD
  * Converts an amount from EUR or GBP to USD using hardcoded rates.
  * Other conversions are not supported in this simplified version.
  * @param {number} amount - The amount to convert.
- * @param {string} fromCurrency - The 3-letter currency code to convert from (should be 'EUR').
+ * @param {string} fromCurrency - The 3-letter currency code to convert from (e.g., 'EUR', 'GBP').
  * @param {string} toCurrency - The 3-letter currency code to convert to (should be 'USD').
  * @returns {number|null} The converted amount in USD or null if conversion is not supported/fails.
  */
 function convertCurrencyHardcoded(amount, fromCurrency, toCurrency) {
-  console.log(`[Honey Barrel BG] Attempting hardcoded conversion: ${amount} ${fromCurrency} to ${toCurrency}`);
+  // console.log(`[Honey Barrel BG] Attempting hardcoded conversion: ${amount} ${fromCurrency} to ${toCurrency}`); // Debug log removed
 
   if (fromCurrency === toCurrency) {
-    console.log('[Honey Barrel BG] Source and target currency are the same.');
+    // console.log('[Honey Barrel BG] Source and target currency are the same.'); // Debug log removed
     return amount;
   }
 
   if (fromCurrency === 'EUR' && toCurrency === 'USD') {
     const convertedAmount = amount * EUR_TO_USD_RATE;
-    console.log(`[Honey Barrel BG] Hardcoded Conversion successful: ${amount} * ${EUR_TO_USD_RATE} = ${convertedAmount.toFixed(2)} ${toCurrency}`);
+    // console.log(`[Honey Barrel BG] Hardcoded Conversion successful: ${amount} * ${EUR_TO_USD_RATE} = ${convertedAmount.toFixed(2)} ${toCurrency}`); // Debug log removed
     return convertedAmount;
   } else if (fromCurrency === 'GBP' && toCurrency === 'USD') {
     const convertedAmount = amount * GBP_TO_USD_RATE;
-    console.log(`[Honey Barrel BG] Hardcoded Conversion successful: ${amount} * ${GBP_TO_USD_RATE} = ${convertedAmount.toFixed(2)} ${toCurrency}`);
+    // console.log(`[Honey Barrel BG] Hardcoded Conversion successful: ${amount} * ${GBP_TO_USD_RATE} = ${convertedAmount.toFixed(2)} ${toCurrency}`); // Debug log removed
     return convertedAmount;
   } else {
     console.warn(`[Honey Barrel BG] Hardcoded conversion only supports EUR to USD and GBP to USD. Cannot convert ${fromCurrency} to ${toCurrency}.`);
@@ -85,14 +104,17 @@ function convertCurrencyHardcoded(amount, fromCurrency, toCurrency) {
 }
 
 /**
- * Fetches listings from the Baxus API.
- * @param {string} bottleName - The name of the bottle to search for (currently unused, fetches general list).
- * @returns {Promise<Array<object>>} A promise that resolves to an array of listing objects (_source property) or an empty array on error.
+ * Fetches listings from the Baxus API, calculates similarity against the query,
+ * filters based on a threshold, sorts by similarity, and caches the results.
+ * @param {string} normalizedQueryName - The normalized name of the bottle to search for.
+ * @returns {Promise<Array<object>>} A promise that resolves to an array of filtered and sorted listing objects (_source property with added 'similarity' score) or an empty array on error.
  */
 async function searchBaxusListings(normalizedQueryName) {
   // TODO: Incorporate normalizedQueryName into the search query later.
   // For now, we fetch a general list.
   console.log(`[Honey Barrel BG] Searching Baxus API for listings related to normalized query: "${normalizedQueryName}"`);
+  // Note (Commit 15): Fetching 1500 results might be inefficient.
+  // Consider fetching fewer initially and implementing pagination if needed later.
   const apiUrl = 'https://services.baxus.co/api/search/listings?from=0&size=1500&listed=true';
 
   try {
@@ -106,27 +128,25 @@ async function searchBaxusListings(normalizedQueryName) {
     }
 
     const data = await response.json();
-    console.log('[Honey Barrel BG] Received Baxus API response (raw):', data);
+    // console.log('[Honey Barrel BG] Received Baxus API response (raw):', data); // Debug log removed
 
-    // Based on the provided JSON, the response is a direct array.
-    // We need to extract the _source from each item.
+    // Extract the _source from each item in the response array.
     if (Array.isArray(data)) {
         const rawListings = data.map(item => item._source).filter(Boolean); // Extract _source and filter out any nulls
-        console.log(`[Honey Barrel BG] Extracted ${rawListings.length} raw listings from API response.`);
+        // console.log(`[Honey Barrel BG] Extracted ${rawListings.length} raw listings from API response.`); // Debug log removed
 
-        // --- Start Commit 8: Similarity Calculation, Filtering, and Sorting ---
-        // --- Start Commit 14: Get threshold from storage ---
+        // --- Get similarity threshold from storage ---
         const storageData = await chrome.storage.sync.get({ similarityThreshold: DEFAULT_SIMILARITY_THRESHOLD });
         const threshold = storageData.similarityThreshold;
         console.log(`[Honey Barrel BG] Using similarity threshold from storage (or default): ${threshold}`);
-        // --- End Commit 14 ---
 
-        console.log(`[Honey Barrel BG] Calculating similarity, filtering (threshold: ${threshold}), and sorting API results against query: "${normalizedQueryName}"`);
+        // --- Calculate similarity, filter, and sort ---
+        // console.log(`[Honey Barrel BG] Calculating similarity, filtering (threshold: ${threshold}), and sorting API results against query: "${normalizedQueryName}"`); // Debug log removed
 
         const processedListings = rawListings.map(item => {
           const apiItemName = item?.name;
           if (!apiItemName) {
-            console.log('[Honey Barrel BG] Skipping item with missing name:', item);
+            // console.log('[Honey Barrel BG] Skipping item with missing name:', item); // Debug log removed
             return null; // Mark for removal later
           }
 
@@ -136,14 +156,14 @@ async function searchBaxusListings(normalizedQueryName) {
           // Add similarity score to the item object
           item.similarity = similarity;
 
-          console.log(`[Honey Barrel BG] Similarity for "${normalizedApiItemName}" (Original: "${apiItemName}"): ${similarity.toFixed(3)}`);
+          // console.log(`[Honey Barrel BG] Similarity for "${normalizedApiItemName}" (Original: "${apiItemName}"): ${similarity.toFixed(3)}`); // Debug log removed
 
           return item; // Return the item with the added similarity score
         }).filter(item => {
             // Filter out items marked as null (missing name) AND items below the threshold
             if (item === null) return false;
             const passesThreshold = item.similarity >= threshold; // Use retrieved threshold
-            console.log(`[Honey Barrel BG] Item "${item.name}" (Similarity: ${item.similarity.toFixed(3)}) ${passesThreshold ? 'PASSES' : 'FAILS'} threshold (${threshold}).`);
+            // console.log(`[Honey Barrel BG] Item "${item.name}" (Similarity: ${item.similarity.toFixed(3)}) ${passesThreshold ? 'PASSES' : 'FAILS'} threshold (${threshold}).`); // Debug log removed
             return passesThreshold;
         });
 
@@ -151,9 +171,8 @@ async function searchBaxusListings(normalizedQueryName) {
         processedListings.sort((a, b) => b.similarity - a.similarity);
 
         console.log(`[Honey Barrel BG] Found ${processedListings.length} listings passing similarity threshold and sorted.`);
-        // --- End Commit 8 ---
 
-        // --- Start Commit 9: Caching ---
+        // --- Cache the results ---
         if (processedListings.length > 0) {
           const cacheKey = 'baxus_search_' + normalizedQueryName;
           const dataToCache = { results: processedListings, timestamp: Date.now() };
@@ -164,7 +183,6 @@ async function searchBaxusListings(normalizedQueryName) {
             console.error(`[Honey Barrel BG] Error caching results for key ${cacheKey}:`, error);
           }
         }
-        // --- End Commit 9 ---
 
         // Return the filtered and sorted listings
         return processedListings;
@@ -179,8 +197,12 @@ async function searchBaxusListings(normalizedQueryName) {
   }
 }
 
-
-// --- Async Function to Get Matches (Cache or API) ---
+/**
+ * Retrieves matching Baxus listings for a normalized bottle name.
+ * Checks local cache first; if cache is stale or missing, fetches from the API.
+ * @param {string} normalizedName - The normalized bottle name to search for.
+ * @returns {Promise<Array<object>>} A promise resolving to an array of matching listings.
+ */
 async function getMatches(normalizedName) {
   console.log(`[Honey Barrel BG] getMatches called for: "${normalizedName}"`);
   const cacheKey = 'baxus_search_' + normalizedName;
@@ -207,132 +229,128 @@ async function getMatches(normalizedName) {
 
 
 // --- Storage for latest bottle info per tab ---
+// Stores the most recently detected bottle information (name, price, normalized name)
+// keyed by the tab ID where it was detected.
 const latestBottleInfoByTab = {};
 
-// --- Combined listener for messages ---
-// NOTE: Removed 'async' keyword here to use explicit 'return true' for async responses
+// --- Message Listener ---
+// Handles messages from content scripts (BOTTLE_INFO) and the popup (GET_LATEST_BOTTLE_INFO, SEARCH_BOTTLE).
+// NOTE: Uses explicit 'return true' for SEARCH_BOTTLE to indicate an asynchronous response.
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log(`[Honey Barrel BG] Message listener triggered for type: ${request.type} from sender:`, sender);
+  console.log(`[Honey Barrel BG] Message received: Type=${request.type}, Sender Tab=${sender.tab?.id}`);
 
-  if (request.type === 'BOTTLE_INFO') {
-    console.log('[Honey Barrel BG] Processing BOTTLE_INFO from content script.');
-    const tabId = sender.tab?.id;
-    if (!tabId) {
-        console.warn('[Honey Barrel BG] Received BOTTLE_INFO without sender tab ID. Cannot store.');
-        return false; // Cannot process further
-    }
-
-    const payload = request.payload;
-    console.log(`[Honey Barrel BG] Received BOTTLE_INFO for tab ${tabId}:`, payload);
-
-    // Store the received payload (which includes name, priceInfo, normalizedName)
-    latestBottleInfoByTab[tabId] = payload;
-    console.log(`[Honey Barrel BG] Stored info for tab ${tabId}. Current store:`, latestBottleInfoByTab);
-
-    // Handle currency conversion if needed (logging only for now)
-    const priceInfo = payload?.priceInfo;
-    if (priceInfo && priceInfo.currency && priceInfo.currency !== 'USD') {
-      console.log(`[Honey Barrel BG] Price is not USD (${priceInfo.currency}). Attempting hardcoded conversion for ${priceInfo.value}.`);
-      const convertedValue = convertCurrencyHardcoded(priceInfo.value, priceInfo.currency, 'USD');
-      if (convertedValue !== null) {
-        console.log(`[Honey Barrel BG] Potential Converted Price (Hardcoded): ${convertedValue.toFixed(2)} USD`);
-      } else {
-        console.log(`[Honey Barrel BG] Hardcoded conversion failed or not supported.`);
+  switch (request.type) {
+    case 'BOTTLE_INFO': {
+      // Received bottle details from a content script. Store it.
+      // console.log('[Honey Barrel BG] Processing BOTTLE_INFO from content script.'); // Debug log removed
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+          console.warn('[Honey Barrel BG] Received BOTTLE_INFO without sender tab ID. Cannot store.');
+          return false; // Cannot process further
       }
-    }
 
-    // No response needed back to content script for this message
-    return false; // Do not keep the message channel open
+      const payload = request.payload;
+      // console.log(`[Honey Barrel BG] Received BOTTLE_INFO for tab ${tabId}:`, payload); // Debug log removed
 
-  } else if (request.type === 'GET_LATEST_BOTTLE_INFO') {
-    console.log('[Honey Barrel BG] Processing GET_LATEST_BOTTLE_INFO request from popup.');
-    const tabId = request.tabId;
-    if (!tabId) {
-        console.warn('[Honey Barrel BG] GET_LATEST_BOTTLE_INFO request received without tabId.');
-        sendResponse({ bottleInfo: null });
-        return; // Exit early
-    }
+      // Store the received payload (includes name, priceInfo, normalizedName)
+      latestBottleInfoByTab[tabId] = payload;
+      // console.log(`[Honey Barrel BG] Stored info for tab ${tabId}. Current store:`, latestBottleInfoByTab); // Debug log removed
 
-    const storedInfo = latestBottleInfoByTab[tabId];
-    console.log(`[Honey Barrel BG] Retrieved stored info for tab ${tabId}:`, storedInfo);
-    sendResponse({ bottleInfo: storedInfo || null }); // Send stored info or null
-    return; // Async response handled by sendResponse
-
-  } else if (request.type === 'SEARCH_BOTTLE') {
-    console.log('[Honey Barrel BG] Processing SEARCH_BOTTLE request from popup.');
-    const normalizedName = request.normalizedName;
-    const tabId = request.tabId;
-
-    if (!normalizedName) {
-      console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without normalizedName.');
-      sendResponse({ matches: [] });
-      return false; // No async response needed
-    }
-    if (!tabId) {
-        console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without tabId in payload.');
-        // Proceed, but log the issue. Overlay won't work.
-    } else {
-         console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Received Tab ID from request: ${tabId}`);
-    }
-
-    // Call the async function but handle response in .then()
-    getMatches(normalizedName).then(matches => {
-        console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Got ${matches?.length ?? 0} matches back from getMatches.`);
-
-        // Send response back to the popup
-        console.log('[Honey Barrel BG] SEARCH_BOTTLE: Sending matches response to popup.');
-        sendResponse({ matches: matches });
-
-        // Send message to content script if matches exist and tabId is valid
-        if (matches && matches.length > 0 && tabId) {
-            console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Sending DISPLAY_OVERLAY message to content script in tab ${tabId}`);
-            try {
-                chrome.tabs.sendMessage(
-                    tabId,
-                    { type: 'DISPLAY_OVERLAY', matches: matches }
-                );
-                console.log(`[Honey Barrel BG] Attempted to send DISPLAY_OVERLAY to content script (tab ${tabId}).`);
-            } catch (error) {
-                console.warn(`[Honey Barrel BG] Error sending message to content script (tab ${tabId}): ${error.message}`);
-            }
-        } else if (!tabId) {
-            console.warn('[Honey Barrel BG] SEARCH_BOTTLE: Cannot send DISPLAY_OVERLAY message because tab ID was missing.');
+      // Log potential currency conversion (actual conversion happens elsewhere if needed)
+      const priceInfo = payload?.priceInfo;
+      if (priceInfo && priceInfo.currency && priceInfo.currency !== 'USD') {
+        // console.log(`[Honey Barrel BG] Price is not USD (${priceInfo.currency}). Attempting hardcoded conversion for ${priceInfo.value}.`); // Debug log removed
+        const convertedValue = convertCurrencyHardcoded(priceInfo.value, priceInfo.currency, 'USD');
+        if (convertedValue !== null) {
+          console.log(`[Honey Barrel BG] Potential Converted Price (Hardcoded): ${convertedValue.toFixed(2)} USD`);
         } else {
-            console.log('[Honey Barrel BG] SEARCH_BOTTLE: No matches found or returned, not sending DISPLAY_OVERLAY message.');
+          // Warning already logged in convertCurrencyHardcoded
         }
-    }).catch(error => {
-        // Handle potential errors from getMatches itself
-        console.error('[Honey Barrel BG] Error during getMatches or subsequent processing:', error);
-        // Attempt to send an error response back to popup
-        try {
-            sendResponse({ error: 'Failed to get matches due to background error.' });
-        } catch (e) {
-            console.error('[Honey Barrel BG] Failed to send error response to popup:', e);
-        }
-    });
+      }
 
-    // Crucially, return true *immediately* to keep the message channel open
-    return true;
-
-  } else if (request.type === 'GET_LATEST_BOTTLE_INFO') {
-    console.log('[Honey Barrel BG] Processing GET_LATEST_BOTTLE_INFO request from popup.');
-    const tabId = request.tabId;
-    if (!tabId) {
-        console.warn('[Honey Barrel BG] GET_LATEST_BOTTLE_INFO request received without tabId.');
-        sendResponse({ bottleInfo: null });
-        return; // Exit early
+      // No response needed back to content script for this message type.
+      return false; // Do not keep the message channel open
     }
 
-    const storedInfo = latestBottleInfoByTab[tabId];
-    console.log(`[Honey Barrel BG] Retrieved stored info for tab ${tabId}:`, storedInfo);
-    sendResponse({ bottleInfo: storedInfo || null }); // Send stored info or null
-    // No return true needed here as sendResponse is called synchronously within this block
-    return;
+    case 'GET_LATEST_BOTTLE_INFO': {
+      // Popup is requesting the stored bottle info for a specific tab.
+      // console.log('[Honey Barrel BG] Processing GET_LATEST_BOTTLE_INFO request from popup.'); // Debug log removed
+      const tabId = request.tabId;
+      if (!tabId) {
+          console.warn('[Honey Barrel BG] GET_LATEST_BOTTLE_INFO request received without tabId.');
+          sendResponse({ bottleInfo: null });
+          return; // Exit early
+      }
 
-  } else {
-    console.log(`[Honey Barrel BG] Received unhandled message type: ${request.type}. Ignoring.`);
-    // Optional: return false explicitly if not handling other types asynchronously
-    return false;
+      const storedInfo = latestBottleInfoByTab[tabId];
+      // console.log(`[Honey Barrel BG] Retrieved stored info for tab ${tabId}:`, storedInfo); // Debug log removed
+      sendResponse({ bottleInfo: storedInfo || null }); // Send stored info or null
+      return; // Response sent synchronously.
+    }
+
+    case 'SEARCH_BOTTLE': {
+      // Popup initiated a search for a bottle. Fetch matches (cache or API) and respond.
+      // Also, send matches to the content script of the relevant tab to display the overlay.
+      console.log('[Honey Barrel BG] Processing SEARCH_BOTTLE request from popup.');
+      const normalizedName = request.normalizedName;
+      const tabId = request.tabId; // Tab ID where the search was initiated
+
+      if (!normalizedName) {
+        console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without normalizedName.');
+        sendResponse({ matches: [] });
+        return false; // No async response needed, send empty results.
+      }
+      if (!tabId) {
+          console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without tabId. Overlay cannot be displayed.');
+          // Proceed with search, but overlay won't work.
+      }
+
+      // Use getMatches (which handles caching) and process the results asynchronously.
+      getMatches(normalizedName).then(matches => {
+          // console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Got ${matches?.length ?? 0} matches back from getMatches.`); // Debug log removed
+
+          // 1. Send response back to the popup
+          // console.log('[Honey Barrel BG] SEARCH_BOTTLE: Sending matches response to popup.'); // Debug log removed
+          sendResponse({ matches: matches });
+
+          // 2. Send message to content script to display overlay (if matches exist and tabId is valid)
+          if (matches && matches.length > 0 && tabId) {
+              console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Sending DISPLAY_OVERLAY message to content script in tab ${tabId}`);
+              try {
+                  chrome.tabs.sendMessage(
+                      tabId,
+                      { type: 'DISPLAY_OVERLAY', matches: matches }
+                  );
+                  // console.log(`[Honey Barrel BG] Attempted to send DISPLAY_OVERLAY to content script (tab ${tabId}).`); // Debug log removed
+              } catch (error) {
+                  // Log error if the content script isn't ready or tab closed.
+                  console.warn(`[Honey Barrel BG] Error sending DISPLAY_OVERLAY message to content script (tab ${tabId}): ${error.message}`);
+              }
+          } else if (!tabId) {
+              // Warning already logged above.
+          } else {
+              // console.log('[Honey Barrel BG] SEARCH_BOTTLE: No matches found or returned, not sending DISPLAY_OVERLAY message.'); // Debug log removed
+          }
+      }).catch(error => {
+          // Handle potential errors from getMatches or the .then block
+          console.error('[Honey Barrel BG] Error during SEARCH_BOTTLE processing:', error);
+          // Attempt to send an error response back to popup
+          try {
+              sendResponse({ error: 'Failed to get matches due to background error.' });
+          } catch (e) {
+              // If sending the error response fails (e.g., popup closed), log it.
+              console.error('[Honey Barrel BG] Failed to send error response to popup:', e);
+          }
+      });
+
+      // Crucially, return true *immediately* to indicate we will send a response asynchronously.
+      return true;
+    }
+
+    default:
+      // Handle unknown message types gracefully.
+      console.log(`[Honey Barrel BG] Received unhandled message type: ${request.type}. Ignoring.`);
+      return false; // No async response planned.
   }
 });
 
