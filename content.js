@@ -127,7 +127,7 @@ function showToast(message, duration = 3000, type = 'info') {
  * from different supported e-commerce sites.
  */
 const siteConfigs = {
-  'www.wine.com': {
+  'wine.com': {
     name: 'wine.com',
     titleSelector: '.pipName',
     priceSelector: '.productPrice',
@@ -147,13 +147,13 @@ const siteConfigs = {
     titleSelector: 'span.lotName1.line-1',
     priceSelector: 'span.winningBid',
   },
-  'www.caskers.com': {
-    name: 'caskers.com', // Keep name without www for display/logging
+  'caskers.com': {
+    name: 'caskers.com',
     titleSelector: 'span[itemprop="name"]',
     priceSelector: 'span.price',
   },
-  'www.baxus.co': {
-    name: 'baxus.co', // Keep name without www for display/logging
+  'baxus.co': {
+    name: 'baxus.co',
     titleSelector: 'h1.h1.text-gray1',
     priceSelector: 'p.xsm\\:numbers-medium.md-numbers-large.text-gray1', // Escaped colon
   },
@@ -167,8 +167,8 @@ const siteConfigs = {
     titleSelector: 'h1.product-title.h5',
     priceSelector: 'strong.price__current',
   },
-  'www.reservebar.com': { // Match hostname including www
-    name: 'reservebar.com', // Display name without www
+  'reservebar.com': {
+    name: 'reservebar.com',
     titleSelector: 'h1[data-sentry-component="Typography"]',
     priceSelector: 'h3[data-sentry-component="Typography"]',
   },
@@ -177,13 +177,13 @@ const siteConfigs = {
     titleSelector: 'h1',
     priceSelector: 'div.item-price-main',
   },
-  'www.totalwine.com': { // Match hostname including www
-    name: 'totalwine.com', // Display name without www
+  'totalwine.com': {
+    name: 'totalwine.com',
     titleSelector: 'h1.productTitle__28e21c67[data-at="product-name-title"]',
     priceSelector: 'div#edlpPrice.priceTxt__4a663926',
   },
-  'www.bevmo.com': { // Match hostname including www
-    name: 'bevmo.com', // Display name without www
+  'bevmo.com': {
+    name: 'bevmo.com',
     titleSelector: 'h1',
     priceSelector: 's.price-item.price-item--regular', // Note: Selects the strikethrough price
   }
@@ -207,8 +207,27 @@ let currentBottleInfo = {
  */
 function getSiteConfig() {
   const hostname = window.location.hostname;
-  // console.log(`Honey Barrel: Detected hostname - ${hostname}`); // Debug log removed
-  return siteConfigs[hostname] || null;
+  // console.log(`Honey Barrel: Detected hostname - ${hostname}`); // Debug log
+
+  // Try direct match first (for hostnames without www. or subdomains like eu.)
+  let config = siteConfigs[hostname];
+  if (config) {
+    // console.log(`Honey Barrel: Found config using direct hostname: ${hostname}`); // Debug log
+    return config;
+  }
+
+  // If no direct match and hostname starts with 'www.', try removing 'www.'
+  if (hostname.startsWith('www.')) {
+    const hostnameWithoutWww = hostname.substring(4);
+    config = siteConfigs[hostnameWithoutWww];
+    if (config) {
+      // console.log(`Honey Barrel: Found config after removing 'www.': ${hostnameWithoutWww}`); // Debug log
+      return config;
+    }
+  }
+
+  // console.log(`Honey Barrel: No config found for hostname: ${hostname}`); // Debug log
+  return null; // No configuration found
 }
 
 /**
