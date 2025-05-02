@@ -161,6 +161,11 @@ const siteConfigs = {
     name: 'uptownspirits.com',
     titleSelector: 'h3.m5.mob-h4',
     priceSelector: 'p.f8pr-price.s1pr',
+  },
+  'qualityliquorstore.com': {
+    name: 'qualityliquorstore.com',
+    titleSelector: 'h1.product-title.h5',
+    priceSelector: 'strong.price__current',
   }
   // Add more site configurations here as needed
 };

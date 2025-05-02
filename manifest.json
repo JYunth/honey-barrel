@@ -27,11 +27,12 @@
     "*://*.whisky.auction/*",
     "*://*.caskers.com/*",
     "*://*.baxus.co/*",
-    "*://*.uptownspirits.com/*"
+    "*://*.uptownspirits.com/*",
+    "*://*.qualityliquorstore.com/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.wine.com/*", "*://*.spiritory.com/*", "*://*.caskcartel.com/*", "*://*.whisky.auction/*", "*://*.caskers.com/*", "*://*.baxus.co/*", "*://*.uptownspirits.com/*"],
+      "matches": ["*://*.wine.com/*", "*://*.spiritory.com/*", "*://*.caskcartel.com/*", "*://*.whisky.auction/*", "*://*.caskers.com/*", "*://*.baxus.co/*", "*://*.uptownspirits.com/*", "*://*.qualityliquorstore.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
