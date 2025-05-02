@@ -1,4 +1,5 @@
-const SIMILARITY_THRESHOLD = 0.6; // Threshold for considering items similar enough
+// Default threshold if not set in storage
+const DEFAULT_SIMILARITY_THRESHOLD = 0.6;
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour in milliseconds
 
 function normalizeBottleName(name) {
@@ -114,7 +115,13 @@ async function searchBaxusListings(normalizedQueryName) {
         console.log(`[Honey Barrel BG] Extracted ${rawListings.length} raw listings from API response.`);
 
         // --- Start Commit 8: Similarity Calculation, Filtering, and Sorting ---
-        console.log(`[Honey Barrel BG] Calculating similarity, filtering (threshold: ${SIMILARITY_THRESHOLD}), and sorting API results against query: "${normalizedQueryName}"`);
+        // --- Start Commit 14: Get threshold from storage ---
+        const storageData = await chrome.storage.sync.get({ similarityThreshold: DEFAULT_SIMILARITY_THRESHOLD });
+        const threshold = storageData.similarityThreshold;
+        console.log(`[Honey Barrel BG] Using similarity threshold from storage (or default): ${threshold}`);
+        // --- End Commit 14 ---
+
+        console.log(`[Honey Barrel BG] Calculating similarity, filtering (threshold: ${threshold}), and sorting API results against query: "${normalizedQueryName}"`);
 
         const processedListings = rawListings.map(item => {
           const apiItemName = item?.name;
@@ -135,8 +142,8 @@ async function searchBaxusListings(normalizedQueryName) {
         }).filter(item => {
             // Filter out items marked as null (missing name) AND items below the threshold
             if (item === null) return false;
-            const passesThreshold = item.similarity >= SIMILARITY_THRESHOLD;
-            console.log(`[Honey Barrel BG] Item "${item.name}" (Similarity: ${item.similarity.toFixed(3)}) ${passesThreshold ? 'PASSES' : 'FAILS'} threshold.`);
+            const passesThreshold = item.similarity >= threshold; // Use retrieved threshold
+            console.log(`[Honey Barrel BG] Item "${item.name}" (Similarity: ${item.similarity.toFixed(3)}) ${passesThreshold ? 'PASSES' : 'FAILS'} threshold (${threshold}).`);
             return passesThreshold;
         });
 
