@@ -1,3 +1,5 @@
+const SIMILARITY_THRESHOLD = 0.6; // Threshold for considering items similar enough
+
 function normalizeBottleName(name) {
   if (!name) return '';
   return name.toLowerCase()
@@ -18,9 +20,31 @@ function getStringBigrams(str) {
 }
 
 function calculateSimilarity(str1, str2) {
-  // Placeholder - Dice coefficient logic will be added in the next commit
-  console.log(`[Honey Barrel BG] Similarity calculation needed for: "${str1}" vs "${str2}"`);
-  return 0; // Return 0 similarity for now
+  // Handle edge cases: empty strings or strings too short for bigrams
+  if (!str1 || !str2 || str1.length < 2 || str2.length < 2) {
+    console.log(`[Honey Barrel BG] Similarity edge case: One or both strings too short ("${str1}", "${str2}"). Returning 0.`);
+    return 0;
+  }
+
+  const bigrams1 = getStringBigrams(str1);
+  const bigrams2 = getStringBigrams(str2);
+
+  // Handle edge case: No bigrams generated (e.g., single character strings after normalization)
+  if (bigrams1.size === 0 || bigrams2.size === 0) {
+     console.log(`[Honey Barrel BG] Similarity edge case: Zero bigrams for one or both strings ("${str1}", "${str2}"). Returning 0.`);
+     return 0;
+  }
+
+  let intersectionSize = 0;
+  for (const bigram of bigrams1) {
+    if (bigrams2.has(bigram)) {
+      intersectionSize++;
+    }
+  }
+
+  const diceCoefficient = (2 * intersectionSize) / (bigrams1.size + bigrams2.size);
+  console.log(`[Honey Barrel BG] Calculated Dice Similarity for "${str1}" vs "${str2}": ${diceCoefficient.toFixed(3)} (Intersection: ${intersectionSize}, Set1: ${bigrams1.size}, Set2: ${bigrams2.size})`);
+  return diceCoefficient;
 }
 
 // Hardcoded conversion rate (Update this value as needed)
@@ -80,25 +104,44 @@ async function searchBaxusListings(normalizedQueryName) {
     // Based on the provided JSON, the response is a direct array.
     // We need to extract the _source from each item.
     if (Array.isArray(data)) {
-        const listings = data.map(item => item._source).filter(Boolean); // Extract _source and filter out any nulls
-        console.log(`[Honey Barrel BG] Extracted ${listings.length} listings from API response.`);
+        const rawListings = data.map(item => item._source).filter(Boolean); // Extract _source and filter out any nulls
+        console.log(`[Honey Barrel BG] Extracted ${rawListings.length} raw listings from API response.`);
 
-        // --- Start Commit 7: Normalization and Logging ---
-        console.log(`[Honey Barrel BG] Normalizing and logging API results against query: "${normalizedQueryName}"`);
-        listings.forEach(item => {
-          const apiItemName = item?.name; // Use optional chaining
-          if (apiItemName) {
-            const normalizedApiItemName = normalizeBottleName(apiItemName);
-            console.log(`[Honey Barrel BG] Comparing Query: "${normalizedQueryName}" vs API Item: "${normalizedApiItemName}" (Original: "${apiItemName}")`);
-            // Similarity calculation will happen here in the next commit
-          } else {
+        // --- Start Commit 8: Similarity Calculation, Filtering, and Sorting ---
+        console.log(`[Honey Barrel BG] Calculating similarity, filtering (threshold: ${SIMILARITY_THRESHOLD}), and sorting API results against query: "${normalizedQueryName}"`);
+
+        const processedListings = rawListings.map(item => {
+          const apiItemName = item?.name;
+          if (!apiItemName) {
             console.log('[Honey Barrel BG] Skipping item with missing name:', item);
+            return null; // Mark for removal later
           }
-        });
-        // --- End Commit 7 ---
 
-        // Return the original, unfiltered listings for now
-        return listings;
+          const normalizedApiItemName = normalizeBottleName(apiItemName);
+          const similarity = calculateSimilarity(normalizedQueryName, normalizedApiItemName);
+
+          // Add similarity score to the item object
+          item.similarity = similarity;
+
+          console.log(`[Honey Barrel BG] Similarity for "${normalizedApiItemName}" (Original: "${apiItemName}"): ${similarity.toFixed(3)}`);
+
+          return item; // Return the item with the added similarity score
+        }).filter(item => {
+            // Filter out items marked as null (missing name) AND items below the threshold
+            if (item === null) return false;
+            const passesThreshold = item.similarity >= SIMILARITY_THRESHOLD;
+            console.log(`[Honey Barrel BG] Item "${item.name}" (Similarity: ${item.similarity.toFixed(3)}) ${passesThreshold ? 'PASSES' : 'FAILS'} threshold.`);
+            return passesThreshold;
+        });
+
+        // Sort the filtered listings by similarity in descending order
+        processedListings.sort((a, b) => b.similarity - a.similarity);
+
+        console.log(`[Honey Barrel BG] Found ${processedListings.length} listings passing similarity threshold and sorted.`);
+        // --- End Commit 8 ---
+
+        // Return the filtered and sorted listings
+        return processedListings;
     } else {
         console.error('[Honey Barrel BG] Baxus API response was not an array as expected.');
         return [];
