@@ -10,12 +10,16 @@ const siteConfigs = {
   'spiritory.com': {
     name: 'spiritory.com',
     titleSelector: 'h1, .product-name, .text-breadcrumbs-active', // Use the first one found
-    priceSelector: 'strong.tw-text-2xl.tw-font-medium.tw-text-text', // Specific selector
+    priceSelector: 'h2.tw-pt-3.tw-text-3xl.tw-font-medium.tw-text-text', // Updated selector for H2 element
   }
 };
 
+// Variables to store the last extracted info
+let lastBottleName = null;
+let lastBottlePrice = null; // Store the raw price string for simplicity now
+
 /**
- * Gets the configuration for the current site based on the hostname.
+* Gets the configuration for the current site based on the hostname.
  */
 function getSiteConfig() {
   const hostname = window.location.hostname;
@@ -41,10 +45,14 @@ function parsePrice(rawPrice) {
 /**
  * Processes the extracted info (logs and sends message).
  */
-function processAndSendData(name, priceInfo, config) {
-  if (name) {
-    console.log(`Honey Barrel: Found Name - ${name}`);
-  } else {
+function processAndSendData(name, priceInfo, rawPrice, config) { // Added rawPrice parameter
+ // Update last known values
+ lastBottleName = name;
+ lastBottlePrice = rawPrice; // Store the raw string as requested by popup
+
+ if (name) {
+   console.log(`Honey Barrel: Found Name - ${name}`);
+ } else {
     console.log(`Honey Barrel: Name element (${config.titleSelector}) not found.`);
   }
 
@@ -104,7 +112,7 @@ function extractProductInfoWithPolling(config) {
     const rawPrice = priceElement.textContent.trim();
     console.log('Honey Barrel: Raw price text (initial find):', rawPrice);
     const priceInfo = parsePrice(rawPrice);
-    processAndSendData(name, priceInfo, config);
+    processAndSendData(name, priceInfo, rawPrice, config); // Pass rawPrice
   } else {
     // Element not found, start polling
     console.log(`Honey Barrel: Price element not found initially. Starting polling for selector: "${config.priceSelector}"`);
@@ -122,12 +130,12 @@ function extractProductInfoWithPolling(config) {
         const rawPrice = priceElement.textContent.trim();
         console.log('Honey Barrel: Raw price text (found via polling):', rawPrice);
         const priceInfo = parsePrice(rawPrice);
-        processAndSendData(name, priceInfo, config);
+        processAndSendData(name, priceInfo, rawPrice, config); // Pass rawPrice
       } else if (attempts >= maxAttempts) {
         // Polling timed out
         clearInterval(intervalId);
         console.log(`Honey Barrel: Price element (${config.priceSelector}) not found after ${maxAttempts} polling attempts.`);
-        processAndSendData(name, null, config); // Process with null priceInfo
+        processAndSendData(name, null, null, config); // Process with null priceInfo and rawPrice
       }
     }, 500); // Poll every 500ms
   }
@@ -141,3 +149,21 @@ if (currentSiteConfig) {
 } else {
   console.log("Honey Barrel: No configuration found for this site.");
 }
+
+// --- Message Listener for Popup Requests ---
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+ console.log("Honey Barrel (content): Received message:", request);
+ if (request.type === 'GET_BOTTLE_INFO') {
+   console.log("Honey Barrel (content): Sending response:", { bottleName: lastBottleName, bottlePrice: lastBottlePrice });
+   // Respond with the last known bottle info
+   sendResponse({
+     bottleName: lastBottleName,
+     bottlePrice: lastBottlePrice // Send the raw price string
+   });
+   // Return true to indicate you wish to send a response asynchronously
+   // (although in this simple case it's synchronous, it's good practice)
+   return true;
+ }
+ // Handle other message types if needed in the future
+ return false; // Indicate synchronous response or no response for other types
+});
