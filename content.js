@@ -156,6 +156,11 @@ const siteConfigs = {
     name: 'baxus.co', // Keep name without www for display/logging
     titleSelector: 'h1.h1.text-gray1',
     priceSelector: 'p.xsm\\:numbers-medium.md-numbers-large.text-gray1', // Escaped colon
+  },
+  'uptownspirits.com': {
+    name: 'uptownspirits.com',
+    titleSelector: 'h3.m5.mob-h4',
+    priceSelector: 'p.f8pr-price.s1pr',
   }
   // Add more site configurations here as needed
 };
@@ -194,10 +199,20 @@ function parsePrice(rawPrice) {
   if (rawPrice.includes('€')) currency = 'EUR';
   else if (rawPrice.includes('£')) currency = 'GBP';
   else if (rawPrice.includes('$')) currency = 'USD';
+  else if (rawPrice.toLowerCase().includes('rs.')) currency = 'INR'; // Detect INR
   // Add other currency symbols if needed
 
-  // Remove non-numeric characters (except decimal point) and parse
-  const cleanedPrice = rawPrice.replace(/[^0-9.]/g, '');
+  // 1. Remove currency symbol and leading/trailing whitespace
+  let processedPrice = rawPrice.replace(/(Rs\.|\$|€|£)\s*/i, '').trim();
+
+  // 2. Remove thousand separators (commas)
+  processedPrice = processedPrice.replace(/,/g, '');
+
+  // 3. Remove any remaining non-numeric characters except the decimal point
+  // (This is a safeguard against unexpected characters)
+  const cleanedPrice = processedPrice.replace(/[^0-9.]/g, '');
+
+  // 4. Parse the cleaned string
   const priceNum = parseFloat(cleanedPrice);
 
   if (isNaN(priceNum)) {
@@ -228,35 +243,56 @@ function processAndSendData(name, priceInfo, rawPrice, config) {
 
  // Log extracted info (keep these logs minimal)
  if (name) {
-   // console.log(`Honey Barrel: Found Name - ${name}`); // Debug log removed
+   console.log(`%cHoney Barrel DEBUG: Found Name - "${name}"`, 'color: blue; font-weight: bold;'); // Added temporary log
  } else {
-    console.log(`Honey Barrel: Name element (${config.titleSelector}) not found.`);
+   console.log(`Honey Barrel: Name element (${config.titleSelector}) not found.`);
   }
 
   if (priceInfo) {
-    // console.log(`Honey Barrel: Parsed Price Info - Value: ${priceInfo.value}, Currency: ${priceInfo.currency}`); // Debug log removed
+    console.log(`%cHoney Barrel DEBUG: Parsed Price Info - Value: ${priceInfo.value}, Currency: ${priceInfo.currency}`, 'color: blue; font-weight: bold;'); // Added temporary log
   } else {
     console.log(`Honey Barrel: Price element (${config.priceSelector}) could not be parsed or was not found.`);
   }
 
   // Send data to background script only if we have both a name and valid price info
   if (name && priceInfo) {
-    console.log('Honey Barrel: Sending BOTTLE_INFO to background script...');
-    showToast("Honey Barrel: Searching for matches...", 3000, 'info'); // Toast: Searching
-    try {
-        chrome.runtime.sendMessage({
-          type: 'BOTTLE_INFO',
-          payload: {
-            name: name,
-            priceInfo: priceInfo, // Send the parsed object
-            normalizedName: normalizedName,
-            sourceSite: config.name
-          }
-        });
-    } catch (error) {
-        console.error("Honey Barrel: Error sending BOTTLE_INFO message:", error);
-        // Potentially show an error toast if sending fails critically
-        // showToast("Honey Barrel: Communication error.", 4000, 'error');
+    // If currency is INR, request conversion first
+    if (priceInfo.currency === 'INR') {
+        console.log('Honey Barrel: Requesting INR to USD conversion from background script...');
+        showToast("Honey Barrel: Converting currency...", 2500, 'info');
+        try {
+            chrome.runtime.sendMessage({
+                type: 'REQUEST_INR_CONVERSION',
+                payload: {
+                    name: name,
+                    priceInfo: priceInfo, // Send original INR price info
+                    normalizedName: normalizedName,
+                    sourceSite: config.name
+                }
+            });
+        } catch (error) {
+            console.error("Honey Barrel: Error sending REQUEST_INR_CONVERSION message:", error);
+            showToast("Honey Barrel: Currency conversion error.", 4000, 'error');
+        }
+    } else {
+        // For USD, EUR, GBP, send directly for comparison
+        console.log('Honey Barrel: Sending BOTTLE_INFO to background script...');
+        showToast("Honey Barrel: Searching for matches...", 3000, 'info'); // Toast: Searching
+        try {
+            chrome.runtime.sendMessage({
+              type: 'BOTTLE_INFO',
+              payload: {
+                name: name,
+                priceInfo: priceInfo, // Send the parsed object (USD, EUR, GBP)
+                normalizedName: normalizedName,
+                sourceSite: config.name
+              }
+            });
+        } catch (error) {
+            console.error("Honey Barrel: Error sending BOTTLE_INFO message:", error);
+            // Potentially show an error toast if sending fails critically
+            // showToast("Honey Barrel: Communication error.", 4000, 'error');
+        }
     }
   } else {
       console.log('Honey Barrel: Not sending message because name or price info is missing.');
@@ -649,6 +685,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             // No response needs to be sent back for this message type.
             return false; // Indicate synchronous handling (no response expected).
 
+case 'CONVERTED_PRICE_INFO':
+            // Background script sent back the USD-converted price info.
+            console.log("Honey Barrel (content): Received CONVERTED_PRICE_INFO message:", request.payload);
+            const convertedPayload = request.payload;
+            if (convertedPayload && convertedPayload.priceInfo && convertedPayload.priceInfo.currency === 'USD') {
+                // Now send the BOTTLE_INFO message with the converted USD price for comparison
+                console.log('Honey Barrel: Sending BOTTLE_INFO with converted USD price to background script...');
+                showToast("Honey Barrel: Searching for matches...", 3000, 'info'); // Toast: Searching
+                try {
+                    chrome.runtime.sendMessage({
+                      type: 'BOTTLE_INFO',
+                      payload: {
+                        name: convertedPayload.name,
+                        priceInfo: convertedPayload.priceInfo, // Use the converted USD priceInfo
+                        normalizedName: convertedPayload.normalizedName,
+                        sourceSite: convertedPayload.sourceSite
+                      }
+                    });
+                } catch (error) {
+                    console.error("Honey Barrel: Error sending BOTTLE_INFO message after conversion:", error);
+                    showToast("Honey Barrel: Communication error.", 4000, 'error');
+                }
+            } else {
+                console.error("Honey Barrel: Received invalid CONVERTED_PRICE_INFO payload:", request.payload);
+                showToast("Honey Barrel: Currency conversion failed.", 4000, 'error');
+            }
+            return false; // Indicate synchronous handling
         default:
             // Handle unknown message types gracefully.
             // console.log(`Honey Barrel (content): Received unhandled message type: ${request.type}`); // Debug log removed

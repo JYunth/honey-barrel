@@ -72,6 +72,7 @@ function calculateSimilarity(str1, str2) {
 // TODO: Get latest rate from user or find a more dynamic solution later.
 const EUR_TO_USD_RATE = 1.14; // Example: 1 EUR = 1.14 USD
 const GBP_TO_USD_RATE = 1.33; // Example: 1 GBP = 1.33 USD
+const INR_TO_USD_RATE = 0.01136; // Updated: 1 INR = 1/88 USD approx
 
 /**
  * Converts an amount from EUR or GBP to USD using hardcoded rates.
@@ -97,8 +98,12 @@ function convertCurrencyHardcoded(amount, fromCurrency, toCurrency) {
     const convertedAmount = amount * GBP_TO_USD_RATE;
     // console.log(`[Honey Barrel BG] Hardcoded Conversion successful: ${amount} * ${GBP_TO_USD_RATE} = ${convertedAmount.toFixed(2)} ${toCurrency}`); // Debug log removed
     return convertedAmount;
+  } else if (fromCurrency === 'INR' && toCurrency === 'USD') {
+    const convertedAmount = amount * INR_TO_USD_RATE;
+    // console.log(`[Honey Barrel BG] Hardcoded Conversion successful: ${amount} * ${INR_TO_USD_RATE} = ${convertedAmount.toFixed(2)} ${toCurrency}`); // Debug log removed
+    return convertedAmount;
   } else {
-    console.warn(`[Honey Barrel BG] Hardcoded conversion only supports EUR to USD and GBP to USD. Cannot convert ${fromCurrency} to ${toCurrency}.`);
+    console.warn(`[Honey Barrel BG] Hardcoded conversion only supports EUR, GBP, INR to USD. Cannot convert ${fromCurrency} to ${toCurrency}.`);
     return null; // Indicate unsupported conversion
   }
 }
@@ -345,6 +350,46 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       // Crucially, return true *immediately* to indicate we will send a response asynchronously.
       return true;
+    }
+
+    case 'REQUEST_INR_CONVERSION': {
+      // Content script sent INR price info and needs it converted to USD.
+      console.log('[Honey Barrel BG] Processing REQUEST_INR_CONVERSION from content script.');
+      const tabId = sender.tab?.id;
+      const payload = request.payload;
+
+      if (!tabId || !payload || !payload.priceInfo || payload.priceInfo.currency !== 'INR') {
+        console.warn('[Honey Barrel BG] Invalid REQUEST_INR_CONVERSION received:', request);
+        return false; // Invalid request
+      }
+
+      const originalPriceInfo = payload.priceInfo;
+      const convertedValue = convertCurrencyHardcoded(originalPriceInfo.value, 'INR', 'USD');
+
+      if (convertedValue !== null) {
+        const convertedPriceInfo = {
+          value: parseFloat(convertedValue.toFixed(2)), // Ensure it's a number with 2 decimal places
+          currency: 'USD'
+        };
+
+        // Send the converted info back to the specific content script tab
+        console.log(`[Honey Barrel BG] Sending CONVERTED_PRICE_INFO back to tab ${tabId}`);
+        try {
+          chrome.tabs.sendMessage(tabId, {
+            type: 'CONVERTED_PRICE_INFO',
+            payload: {
+              ...payload, // Include original name, normalizedName, sourceSite
+              priceInfo: convertedPriceInfo // Overwrite with the converted price info
+            }
+          });
+        } catch (error) {
+          console.warn(`[Honey Barrel BG] Error sending CONVERTED_PRICE_INFO message to content script (tab ${tabId}): ${error.message}`);
+        }
+      } else {
+        console.error(`[Honey Barrel BG] Failed to convert INR price for tab ${tabId}:`, originalPriceInfo);
+        // Optionally send an error message back to content script? For now, just log.
+      }
+      return false; // Indicate synchronous handling (message sent via chrome.tabs.sendMessage)
     }
 
     default:
