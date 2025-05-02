@@ -1,61 +1,143 @@
 /**
- * Formats a raw price string (e.g., "6997", "$69.97", "Price: 69.97") into a standard format (e.g., "$69.97").
- * @param {string} rawPrice - The raw price string to format.
- * @returns {string|null} The formatted price string or null if formatting fails.
+ * Configuration object holding selectors for different supported sites.
  */
-function formatPrice(rawPrice) {
-  if (!rawPrice) return null;
-
-  // Remove non-digit characters except for a potential decimal point
-  const cleanedPrice = rawPrice.replace(/[^0-9.]/g, '');
-  const priceNum = parseFloat(cleanedPrice);
-
-  if (isNaN(priceNum)) return null;
-
-  // Format to 2 decimal places
-  // Check if the original string contained a decimal to decide if we need to divide by 100
-  // This handles cases like "6997" (needs division) vs "69.97" (doesn't)
-  let finalPrice;
-  if (cleanedPrice.includes('.')) {
-      finalPrice = priceNum;
-  } else {
-      // Assuming the number represents cents if no decimal is present
-      finalPrice = priceNum / 100;
+const siteConfigs = {
+  'www.wine.com': {
+    name: 'wine.com',
+    titleSelector: '.pipName',
+    priceSelector: '.productPrice',
+  },
+  'spiritory.com': {
+    name: 'spiritory.com',
+    titleSelector: 'h1, .product-name, .text-breadcrumbs-active', // Use the first one found
+    priceSelector: 'strong.tw-text-2xl.tw-font-medium.tw-text-text', // Specific selector
   }
+};
 
-  return `$${finalPrice.toFixed(2)}`;
+/**
+ * Gets the configuration for the current site based on the hostname.
+ */
+function getSiteConfig() {
+  const hostname = window.location.hostname;
+  console.log(`Honey Barrel: Detected hostname - ${hostname}`);
+  return siteConfigs[hostname] || null;
 }
 
 /**
- * Extracts wine information (name and price) from wine.com product pages.
+ * Extracts the numeric value and currency symbol from a raw price string.
  */
-function extractWineComInfo() {
-  console.log("Honey Barrel: Attempting to extract info from wine.com...");
+function parsePrice(rawPrice) {
+  if (!rawPrice) return null;
+  let currency = 'USD';
+  if (rawPrice.includes('€')) currency = 'EUR';
+  else if (rawPrice.includes('£')) currency = 'GBP';
+  else if (rawPrice.includes('$')) currency = 'USD';
+  const cleanedPrice = rawPrice.replace(/[^0-9.]/g, '');
+  const priceNum = parseFloat(cleanedPrice);
+  if (isNaN(priceNum)) return null;
+  return { value: priceNum, currency: currency };
+}
 
-  const titleSelector = '.pipName';
-  const priceSelector = '.productPrice';
-
-  const nameElement = document.querySelector(titleSelector);
-  const priceElement = document.querySelector(priceSelector);
-
-  const name = nameElement ? nameElement.textContent.trim() : null;
-  const rawPrice = priceElement ? priceElement.textContent.trim() : null;
-  const formattedPrice = formatPrice(rawPrice);
-
+/**
+ * Processes the extracted info (logs and sends message).
+ */
+function processAndSendData(name, priceInfo, config) {
   if (name) {
     console.log(`Honey Barrel: Found Name - ${name}`);
   } else {
-    console.log(`Honey Barrel: Name element (${titleSelector}) not found.`);
+    console.log(`Honey Barrel: Name element (${config.titleSelector}) not found.`);
   }
 
-  if (formattedPrice) {
-    console.log(`Honey Barrel: Found Price - ${formattedPrice}`);
-  } else if (rawPrice) {
-    console.log(`Honey Barrel: Found Price (unformatted) - ${rawPrice}`);
+  if (priceInfo) {
+    console.log(`Honey Barrel: Parsed Price Info - Value: ${priceInfo.value}, Currency: ${priceInfo.currency}`);
   } else {
-    console.log(`Honey Barrel: Price element (${priceSelector}) not found.`);
+    // This case might not be reached if polling fails, but good for robustness
+    console.log(`Honey Barrel: Price element (${config.priceSelector}) could not be parsed or was not found.`);
+  }
+
+  // Send data to background script if both name and parsed price info are found
+  if (name && priceInfo) {
+    console.log('Honey Barrel: Sending structured price data to background script...');
+    chrome.runtime.sendMessage({
+      type: 'BOTTLE_INFO',
+      payload: {
+        name: name,
+        priceInfo: priceInfo,
+        sourceSite: config.name
+      }
+    });
+  } else {
+      console.log('Honey Barrel: Not sending message because name or price info is missing.');
   }
 }
 
-// Run the extraction function when the content script loads
-extractWineComInfo();
+
+/**
+ * Extracts product information, polling for the price element if necessary.
+ */
+function extractProductInfoWithPolling(config) {
+  if (!config) {
+    console.log("Honey Barrel: Site not supported or config not found.");
+    return;
+  }
+
+  console.log(`Honey Barrel: Attempting to extract info from ${config.name}...`);
+
+  // --- Extract Name (usually available earlier) ---
+  const nameElement = document.querySelector(config.titleSelector);
+  const name = nameElement ? nameElement.textContent.trim() : null;
+  if (!name) {
+      console.log(`Honey Barrel: Name element (${config.titleSelector}) not found initially.`);
+      // Decide if we should proceed without a name or poll for it too (simpler for now to proceed)
+  } else {
+      console.log(`Honey Barrel: Found Name initially - ${name}`);
+  }
+
+
+  // --- Attempt to Extract Price ---
+  console.log(`Honey Barrel: Attempting initial price element find with selector: "${config.priceSelector}"`);
+  let priceElement = document.querySelector(config.priceSelector);
+  console.log('Honey Barrel: Initial price element found:', priceElement);
+
+  if (priceElement) {
+    // Element found immediately
+    const rawPrice = priceElement.textContent.trim();
+    console.log('Honey Barrel: Raw price text (initial find):', rawPrice);
+    const priceInfo = parsePrice(rawPrice);
+    processAndSendData(name, priceInfo, config);
+  } else {
+    // Element not found, start polling
+    console.log(`Honey Barrel: Price element not found initially. Starting polling for selector: "${config.priceSelector}"`);
+    let attempts = 0;
+    const maxAttempts = 10; // Poll for 5 seconds (10 * 500ms)
+    const intervalId = setInterval(() => {
+      attempts++;
+      priceElement = document.querySelector(config.priceSelector);
+      console.log(`Honey Barrel: Polling attempt ${attempts}. Price element found:`, priceElement);
+
+      if (priceElement) {
+        // Found the element
+        clearInterval(intervalId);
+        console.log(`Honey Barrel: Price element found after ${attempts} polling attempts.`);
+        const rawPrice = priceElement.textContent.trim();
+        console.log('Honey Barrel: Raw price text (found via polling):', rawPrice);
+        const priceInfo = parsePrice(rawPrice);
+        processAndSendData(name, priceInfo, config);
+      } else if (attempts >= maxAttempts) {
+        // Polling timed out
+        clearInterval(intervalId);
+        console.log(`Honey Barrel: Price element (${config.priceSelector}) not found after ${maxAttempts} polling attempts.`);
+        processAndSendData(name, null, config); // Process with null priceInfo
+      }
+    }, 500); // Poll every 500ms
+  }
+}
+
+// --- Main Execution ---
+const currentSiteConfig = getSiteConfig();
+if (currentSiteConfig) {
+  // Use the polling function
+  extractProductInfoWithPolling(currentSiteConfig);
+} else {
+  console.log("Honey Barrel: No configuration found for this site.");
+}

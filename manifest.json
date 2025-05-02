@@ -2,13 +2,17 @@
   "manifest_version": 3,
   "name": "Honey Barrel",
   "description": "Compares wine & spirits prices across retail sites and the BAXUS marketplace.",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "action": {
     "default_title": "Honey Barrel"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.wine.com/*"],
+      "matches": ["*://*.wine.com/*", "*://*.spiritory.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
