@@ -39,15 +39,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
       console.log("[Honey Barrel Popup] Received response from content script:", response);
 
-      if (response && response.bottleInfo && response.bottleInfo.name) {
-        const bottleName = response.bottleInfo.name;
+      // Check for both name and normalizedName
+      if (response && response.bottleInfo && response.bottleInfo.name && response.bottleInfo.normalizedName) {
+        const bottleName = response.bottleInfo.name; // Keep original name for display
+        const normalizedName = response.bottleInfo.normalizedName; // Get normalized name for search
         // Store the price if available
         currentPrice = response.bottleInfo.priceInfo?.value;
-        console.log(`[Honey Barrel Popup] Got bottle name: "${bottleName}", Price: ${currentPrice ?? 'N/A'}. Requesting search from background...`);
-        matchesListElement.textContent = `Searching Baxus for "${bottleName}"...`;
+        console.log(`[Honey Barrel Popup] Got bottle name: "${bottleName}" (Normalized: "${normalizedName}"), Price: ${currentPrice ?? 'N/A'}. Requesting search from background...`);
+        matchesListElement.textContent = `Searching Baxus for "${bottleName}"...`; // Display original name
 
-        // Step 2: Send search request to the background script with the bottle name
-        chrome.runtime.sendMessage({ type: 'SEARCH_BOTTLE', bottleName: bottleName }, function(searchResponse) {
+        // Step 2: Send search request to the background script with the NORMALIZED name
+        chrome.runtime.sendMessage({ type: 'SEARCH_BOTTLE', normalizedName: normalizedName }, function(searchResponse) {
           if (chrome.runtime.lastError) {
             console.error("[Honey Barrel Popup] Error receiving search results from background:", chrome.runtime.lastError.message);
             matchesListElement.textContent = 'Error getting search results.';
@@ -77,7 +79,7 @@ document.addEventListener('DOMContentLoaded', function() {
               matchesListElement.appendChild(list);
             } else {
               console.log("[Honey Barrel Popup] No matches found from background search.");
-              matchesListElement.textContent = `No Baxus matches found for "${bottleName}".`;
+              matchesListElement.textContent = `No Baxus matches found for "${bottleName}".`; // Display original name
             }
           } else {
             console.error("[Honey Barrel Popup] Invalid search response format received from background:", searchResponse);

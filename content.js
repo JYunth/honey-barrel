@@ -1,3 +1,11 @@
+function normalizeBottleName(name) {
+  if (!name) return '';
+  return name.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+    .replace(/\b(the|limited|edition|release|single|barrel|cask|strength|proof|year|old|aged|distillery|winery|vineyard|chateau|domaine)\b/g, '') // Remove common terms
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim();
+}
 /**
  * Configuration object holding selectors for different supported sites.
  */
@@ -17,6 +25,7 @@ const siteConfigs = {
 // Variables to store the last extracted info
 let lastBottleName = null;
 let lastBottlePrice = null; // Store the raw price string for simplicity now
+let lastNormalizedName = null; // Store the normalized name
 
 /**
 * Gets the configuration for the current site based on the hostname.
@@ -46,9 +55,12 @@ function parsePrice(rawPrice) {
  * Processes the extracted info (logs and sends message).
  */
 function processAndSendData(name, priceInfo, rawPrice, config) { // Added rawPrice parameter
+ const normalizedName = normalizeBottleName(name); // Normalize the name
+
  // Update last known values
  lastBottleName = name;
  lastBottlePrice = rawPrice; // Store the raw string as requested by popup
+ lastNormalizedName = normalizedName; // Store the normalized name
 
  if (name) {
    console.log(`Honey Barrel: Found Name - ${name}`);
@@ -71,6 +83,7 @@ function processAndSendData(name, priceInfo, rawPrice, config) { // Added rawPri
       payload: {
         name: name,
         priceInfo: priceInfo,
+        normalizedName: normalizedName, // Include normalized name
         sourceSite: config.name
       }
     });
@@ -166,7 +179,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
    sendResponse({
        bottleInfo: {
            name: lastBottleName,
-           priceInfo: priceInfo // Send the parsed price info object
+           priceInfo: priceInfo, // Send the parsed price info object
+           normalizedName: lastNormalizedName // Send the normalized name
        }
    });
    // Return true to indicate you wish to send a response asynchronously

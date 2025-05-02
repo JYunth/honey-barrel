@@ -1,3 +1,28 @@
+function normalizeBottleName(name) {
+  if (!name) return '';
+  return name.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+    .replace(/\b(the|limited|edition|release|single|barrel|cask|strength|proof|year|old|aged|distillery|winery|vineyard|chateau|domaine)\b/g, '') // Remove common terms
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim();
+}
+function getStringBigrams(str) {
+  if (!str || str.length < 2) {
+    return new Set();
+  }
+  const bigrams = new Set();
+  for (let i = 0; i < str.length - 1; i++) {
+    bigrams.add(str.substring(i, i + 2));
+  }
+  return bigrams;
+}
+
+function calculateSimilarity(str1, str2) {
+  // Placeholder - Dice coefficient logic will be added in the next commit
+  console.log(`[Honey Barrel BG] Similarity calculation needed for: "${str1}" vs "${str2}"`);
+  return 0; // Return 0 similarity for now
+}
+
 // Hardcoded conversion rate (Update this value as needed)
 // TODO: Get latest rate from user or find a more dynamic solution later.
 const EUR_TO_USD_RATE = 1.14; // Example: 1 EUR = 1.1 USD
@@ -33,11 +58,11 @@ function convertCurrencyHardcoded(amount, fromCurrency, toCurrency) {
  * @param {string} bottleName - The name of the bottle to search for (currently unused, fetches general list).
  * @returns {Promise<Array<object>>} A promise that resolves to an array of listing objects (_source property) or an empty array on error.
  */
-async function searchBaxusListings(bottleName) {
-  // TODO: Incorporate bottleName into the search query later.
-  // For now, we fetch a general list as requested in Commit 6.
-  console.log(`[Honey Barrel BG] Searching Baxus API for: ${bottleName || 'general listings (Commit 6)'}`);
-  const apiUrl = 'https://services.baxus.co/api/search/listings?from=0&size=50&listed=true';
+async function searchBaxusListings(normalizedQueryName) {
+  // TODO: Incorporate normalizedQueryName into the search query later.
+  // For now, we fetch a general list.
+  console.log(`[Honey Barrel BG] Searching Baxus API for listings related to normalized query: "${normalizedQueryName}"`);
+  const apiUrl = 'https://services.baxus.co/api/search/listings?from=0&size=1500&listed=true';
 
   try {
     const response = await fetch(apiUrl);
@@ -57,6 +82,22 @@ async function searchBaxusListings(bottleName) {
     if (Array.isArray(data)) {
         const listings = data.map(item => item._source).filter(Boolean); // Extract _source and filter out any nulls
         console.log(`[Honey Barrel BG] Extracted ${listings.length} listings from API response.`);
+
+        // --- Start Commit 7: Normalization and Logging ---
+        console.log(`[Honey Barrel BG] Normalizing and logging API results against query: "${normalizedQueryName}"`);
+        listings.forEach(item => {
+          const apiItemName = item?.name; // Use optional chaining
+          if (apiItemName) {
+            const normalizedApiItemName = normalizeBottleName(apiItemName);
+            console.log(`[Honey Barrel BG] Comparing Query: "${normalizedQueryName}" vs API Item: "${normalizedApiItemName}" (Original: "${apiItemName}")`);
+            // Similarity calculation will happen here in the next commit
+          } else {
+            console.log('[Honey Barrel BG] Skipping item with missing name:', item);
+          }
+        });
+        // --- End Commit 7 ---
+
+        // Return the original, unfiltered listings for now
         return listings;
     } else {
         console.error('[Honey Barrel BG] Baxus API response was not an array as expected.');
@@ -111,10 +152,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   } else if (request.type === 'SEARCH_BOTTLE') {
     console.log('[Honey Barrel BG] Processing SEARCH_BOTTLE request from popup.');
-    const bottleName = request.bottleName; // Get bottleName from the request
+    const normalizedName = request.normalizedName; // Expect normalizedName from the request
 
-    if (!bottleName) {
-        console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without bottleName.');
+    if (!normalizedName) {
+        console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without normalizedName.');
         sendResponse({ matches: [] }); // Send empty array if no name provided
         return false; // No async operation needed here, sendResponse was synchronous
     }
@@ -122,8 +163,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Use an IIFE (Immediately Invoked Function Expression) to handle the async operation
     // This allows the main listener function to return `true` immediately.
     (async () => {
-      console.log(`[Honey Barrel BG] Calling async searchBaxusListings for: ${bottleName}`);
-      const results = await searchBaxusListings(bottleName); // Call the updated async function
+      console.log(`[Honey Barrel BG] Calling async searchBaxusListings for normalized name: "${normalizedName}"`);
+      const results = await searchBaxusListings(normalizedName); // Pass normalizedName
       console.log('[Honey Barrel BG] Sending search results back to popup:', results);
       // Send the extracted _source objects
       sendResponse({ matches: results });
