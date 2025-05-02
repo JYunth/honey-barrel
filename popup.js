@@ -1,96 +1,230 @@
-document.addEventListener('DOMContentLoaded', function() {
-  const matchesListElement = document.getElementById('matchesList');
-  let currentPrice = null; // Variable to store the price from the current page
+function normalizeBottleName(name) {
+  if (!name) return '';
+  return name.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+    .replace(/\b(the|limited|edition|release|single|barrel|cask|strength|proof|year|old|aged|distillery|winery|vineyard|chateau|domaine)\b/g, '') // Remove common terms
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim();
+}
+// Popup script for Honey Barrel extension
 
-  if (!matchesListElement) {
-    console.error("[Honey Barrel Popup] Could not find #matchesList element in popup.html");
-    return; // Stop if the essential element is missing
+// Function to create a match item element with enhanced details
+function createMatchItem(match, currentPrice) {
+    const matchItem = document.createElement('div');
+    matchItem.className = 'match-item';
+
+    // Removed blurhash background logic
+
+    // Removed main content container div - elements are added directly to matchItem now
+
+    // Create the header with image and details
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'match-header';
+
+    // Add image if available
+    if (match.imageUrl) {
+      const img = document.createElement('img');
+      img.className = 'match-image';
+      img.src = match.imageUrl;
+      img.alt = match.name;
+      img.onerror = function() {
+        this.onerror = null;
+        this.src = 'images/bottle-placeholder.png'; // Fallback image
+      };
+      headerDiv.appendChild(img);
+    }
+
+    // Add details
+    const detailsDiv = document.createElement('div');
+    detailsDiv.className = 'match-details';
+
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'match-name';
+    nameDiv.textContent = match.name;
+    detailsDiv.appendChild(nameDiv);
+
+    if (match.spiritType) {
+      const typeDiv = document.createElement('div');
+      typeDiv.className = 'match-type';
+      typeDiv.textContent = match.spiritType;
+      detailsDiv.appendChild(typeDiv);
+    }
+
+    // Removed region logic
+
+    headerDiv.appendChild(detailsDiv);
+    matchItem.appendChild(headerDiv); // Add header directly to matchItem
+
+    // Create price comparison
+    const priceCompareDiv = document.createElement('div');
+    priceCompareDiv.className = 'price-compare';
+
+    // Current price
+    const currentPriceDiv = document.createElement('div');
+    currentPriceDiv.className = 'price-compare-item';
+    currentPriceDiv.innerHTML = `
+      <div class="price-label">Current Site</div>
+      <div class="price-value">$${currentPrice.toFixed(2)}</div>
+    `;
+    priceCompareDiv.appendChild(currentPriceDiv);
+
+    // BAXUS price
+    const baxusPriceDiv = document.createElement('div');
+    baxusPriceDiv.className = 'price-compare-item';
+    baxusPriceDiv.innerHTML = `
+      <div class="price-label">on BAXUS</div>
+      <div class="price-value">$${match.price.toFixed(2)}</div>
+    `;
+    priceCompareDiv.appendChild(baxusPriceDiv);
+
+    matchItem.appendChild(priceCompareDiv); // Add price compare directly to matchItem
+
+    // Calculate savings
+    const priceDiff = currentPrice - match.price; // Correct calculation: Current - BAXUS
+
+    // Add link to BAXUS (moved before savings so savings appears above it)
+    const viewBtn = document.createElement('a');
+    viewBtn.href = `https://baxus.co/asset/${match.id}`;
+    viewBtn.className = 'view-btn';
+    viewBtn.target = '_blank';
+    // Use span for arrow as defined in the updated CSS
+    viewBtn.innerHTML = `View on BAXUS <span>→</span>`;
+    // We will append this later, after potentially adding the savings div
+
+    // Display savings (only if savings exist) - Placed between price compare and button
+    // Restore original logic: Display savings only if they exist
+    if (priceDiff > 0) { // Only show if current price is higher (savings on BAXUS)
+      const savingsDiv = document.createElement('div');
+      savingsDiv.className = 'savings';
+      // Keep user's updated format (no arrow, with exclamation)
+      savingsDiv.innerHTML = `Save $${priceDiff.toFixed(2)} on BAXUS!`;
+      matchItem.appendChild(savingsDiv); // Add savings div before the button
+    }
+    // Removed else if (priceDiff === 0) and else blocks
+
+    // Now append the button
+    matchItem.appendChild(viewBtn); // Add button directly to matchItem
+
+    // Removed duplicate button creation below
+    // Removed appending contentDiv
+    return matchItem;
   }
 
-  matchesListElement.textContent = 'Getting bottle info from page...'; // Initial state
+  // Function to show "no matches" content
+  function showNoMatches() {
+    const matchesContainer = document.querySelector('.matches');
 
-  // Step 1: Get bottle info from the content script
-  chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-    if (chrome.runtime.lastError) {
-      console.error("[Honey Barrel Popup] Error querying tabs:", chrome.runtime.lastError.message);
-      matchesListElement.textContent = 'Error contacting page.';
+    matchesContainer.innerHTML = `
+      <div class="no-matches">
+        <p>No matching bottles found on BAXUS marketplace</p>
+      </div>
+    `;
+    // Removed SVG from no-matches
+  }
+
+  // Function to update popup status
+  function updateStatus(message, type = 'loading') {
+    const statusElement = document.querySelector('.status');
+    statusElement.textContent = message;
+    statusElement.className = `status ${type}`;
+  }
+
+  // Function to update popup content
+  function updatePopupContent(matches, currentPrice) {
+    const matchesContainer = document.querySelector('.matches');
+
+    // Removed hiding loading indicator as it doesn't exist
+
+    if (!matches || matches.length === 0) {
+      updateStatus('No matches found', 'error'); // Keep error status text
+      showNoMatches();
       return;
     }
-    if (!tabs || tabs.length === 0) {
-        console.error("[Honey Barrel Popup] No active tab found.");
-        matchesListElement.textContent = 'Could not find active tab.';
-        return;
-    }
 
-    const activeTabId = tabs[0].id;
-    console.log(`[Honey Barrel Popup] Sending 'GET_BOTTLE_INFO' to tab ${activeTabId}`);
+    updateStatus(`Found ${matches.length} matching bottle${matches.length > 1 ? 's' : ''}`, 'success');
+    matchesContainer.innerHTML = '';
 
-    chrome.tabs.sendMessage(activeTabId, { type: 'GET_BOTTLE_INFO' }, function(response) {
-      if (chrome.runtime.lastError) {
-        console.error("[Honey Barrel Popup] Error receiving bottle info from content script:", chrome.runtime.lastError.message);
-        matchesListElement.textContent = 'Could not get info from this page. Is it supported?';
-        // Common error: "Could not establish connection. Receiving end does not exist."
-        // This often means the content script hasn't been injected or the page is restricted (e.g., chrome:// pages)
-        if (chrome.runtime.lastError.message.includes("Receiving end does not exist")) {
-             matchesListElement.textContent += ' (Content script not available on this page).';
-        }
+    // Add each match with a slight delay for animation
+    matches.forEach((match, index) => {
+      setTimeout(() => {
+        matchesContainer.appendChild(createMatchItem(match, currentPrice));
+      }, index * 100);
+    });
+  }
+
+  // Function to handle errors
+  function handleError(message) {
+    updateStatus(message || 'An error occurred', 'error'); // Keep error status text
+    // Removed hiding loading indicator as it doesn't exist
+    showNoMatches();
+  }
+
+  // Execute when popup loads
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log("Popup opened");
+    updateStatus('Checking current page...', 'loading');
+
+    // Query the active tab to get current bottle information
+    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+      const activeTab = tabs[0];
+      console.log("Active tab:", activeTab.url);
+
+      if (!activeTab || !activeTab.id) { // Added check for activeTab.id
+        handleError('Cannot access current tab or tab ID');
         return;
       }
 
-      console.log("[Honey Barrel Popup] Received response from content script:", response);
-
-      // Check for both name and normalizedName
-      if (response && response.bottleInfo && response.bottleInfo.name && response.bottleInfo.normalizedName) {
-        const bottleName = response.bottleInfo.name; // Keep original name for display
-        const normalizedName = response.bottleInfo.normalizedName; // Get normalized name for search
-        // Store the price if available
-        currentPrice = response.bottleInfo.priceInfo?.value;
-        console.log(`[Honey Barrel Popup] Got bottle name: "${bottleName}" (Normalized: "${normalizedName}"), Price: ${currentPrice ?? 'N/A'}. Requesting search from background...`);
-        matchesListElement.textContent = `Searching Baxus for "${bottleName}"...`; // Display original name
-
-        // Step 2: Send search request to the background script with the NORMALIZED name AND the tab ID
-        chrome.runtime.sendMessage({ type: 'SEARCH_BOTTLE', normalizedName: normalizedName, tabId: activeTabId }, function(searchResponse) { // Add tabId here
+      // Request latest bottle info from background script
+      console.log(`Requesting latest info for tab ${activeTab.id} from background script...`);
+      chrome.runtime.sendMessage({ type: 'GET_LATEST_BOTTLE_INFO', tabId: activeTab.id }, response => {
           if (chrome.runtime.lastError) {
-            console.error("[Honey Barrel Popup] Error receiving search results from background:", chrome.runtime.lastError.message);
-            matchesListElement.textContent = 'Error getting search results.';
-            return;
+              console.error("Error requesting info from background:", chrome.runtime.lastError.message);
+              handleError(`Error getting page info: ${chrome.runtime.lastError.message}`);
+              return;
           }
 
-          console.log("[Honey Barrel Popup] Received search response from background:", searchResponse);
-          matchesListElement.innerHTML = ''; // Clear loading message
+          console.log("Response from background script (GET_LATEST_BOTTLE_INFO):", response);
 
-          if (searchResponse && searchResponse.matches && Array.isArray(searchResponse.matches)) {
-            const matches = searchResponse.matches; // These are the _source objects
-
-            if (matches.length > 0) {
-              console.log(`[Honey Barrel Popup] Displaying ${matches.length} matches.`);
-              // TODO: Display currentPrice alongside matches later
-              const list = document.createElement('ul');
-              matches.forEach(match => { // match is the _source object
-                const listItem = document.createElement('li');
-                // Access data directly from the _source object
-                const name = match.name || 'Name N/A';
-                const price = match.price;
-                const priceString = typeof price === 'number' ? `$${price.toFixed(2)}` : 'Price N/A';
-                listItem.textContent = `${name} - ${priceString}`;
-                // You can add more details here later, e.g., match.imageUrl
-                list.appendChild(listItem);
-              });
-              matchesListElement.appendChild(list);
-            } else {
-              console.log("[Honey Barrel Popup] No matches found from background search.");
-              matchesListElement.textContent = `No Baxus matches found for "${bottleName}".`; // Display original name
-            }
-          } else {
-            console.error("[Honey Barrel Popup] Invalid search response format received from background:", searchResponse);
-            matchesListElement.textContent = 'Failed to get matches (invalid response).';
+          if (!response || !response.bottleInfo || !response.bottleInfo.name || !response.bottleInfo.priceInfo) {
+              handleError('No bottle detected or info not ready yet.');
+              return;
           }
-        });
 
-      } else {
-        console.log("[Honey Barrel Popup] No valid bottle info received from content script.");
-        matchesListElement.textContent = 'Could not identify a bottle on this page.';
-      }
+          const { name: bottleName, priceInfo } = response.bottleInfo;
+          const currentPrice = priceInfo.value; // Assuming priceInfo has { value, currency }
+
+          console.log(`Raw bottleName from background script: "${bottleName}"`);
+          const normalizedBottleName = normalizeBottleName(bottleName);
+          updateStatus(`Trying to find: ${bottleName}`, 'loading');
+          console.log(`Normalized name for search: "${normalizedBottleName}"`);
+
+          // Ensure normalized name is not empty before sending
+          if (!normalizedBottleName) {
+              console.warn("Normalized bottle name is empty. Aborting search.");
+              handleError("Could not determine a valid name for search.");
+              return;
+          }
+
+          // Search for matches using the background script
+          chrome.runtime.sendMessage(
+              { type: 'SEARCH_BOTTLE', normalizedName: normalizedBottleName, tabId: activeTab.id },
+              searchResponse => {
+                  if (chrome.runtime.lastError) {
+                      console.error("Error sending/receiving SEARCH_BOTTLE:", chrome.runtime.lastError.message);
+                      handleError(`Error searching: ${chrome.runtime.lastError.message}`);
+                      return;
+                  }
+
+                  console.log("Search response:", searchResponse);
+                  if (searchResponse && searchResponse.matches) {
+                      // Pass the numeric price value to updatePopupContent
+                      updatePopupContent(searchResponse.matches, currentPrice);
+                  } else {
+                      const errorMsg = searchResponse && searchResponse.error ? searchResponse.error : 'Failed to search bottles';
+                      handleError(errorMsg);
+                  }
+              }
+          );
+      });
     });
   });
-});

@@ -199,96 +199,127 @@ async function getMatches(normalizedName) {
 }
 
 
-// --- Combined listener for messages (now async) ---
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => { // Make the listener async
-  console.log(`[Honey Barrel BG] Message listener triggered for type: ${request.type}`);
+// --- Storage for latest bottle info per tab ---
+const latestBottleInfoByTab = {};
+
+// --- Combined listener for messages ---
+// NOTE: Removed 'async' keyword here to use explicit 'return true' for async responses
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log(`[Honey Barrel BG] Message listener triggered for type: ${request.type} from sender:`, sender);
 
   if (request.type === 'BOTTLE_INFO') {
     console.log('[Honey Barrel BG] Processing BOTTLE_INFO from content script.');
-    const bottleName = request.payload?.name;
-    const sourceSite = request.payload?.sourceSite || 'unknown site';
-    console.log(`[Honey Barrel BG] Received BOTTLE_INFO from ${sourceSite}:`, request.payload);
-
-
-    // Just log the info for now. The popup will initiate the search.
-    if (!bottleName) {
-      console.warn('[Honey Barrel BG] No bottle name found in BOTTLE_INFO payload.');
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+        console.warn('[Honey Barrel BG] Received BOTTLE_INFO without sender tab ID. Cannot store.');
+        return false; // Cannot process further
     }
 
-    // Handle currency conversion if needed (keeping existing logic for now)
-    const priceInfo = request.payload?.priceInfo;
+    const payload = request.payload;
+    console.log(`[Honey Barrel BG] Received BOTTLE_INFO for tab ${tabId}:`, payload);
+
+    // Store the received payload (which includes name, priceInfo, normalizedName)
+    latestBottleInfoByTab[tabId] = payload;
+    console.log(`[Honey Barrel BG] Stored info for tab ${tabId}. Current store:`, latestBottleInfoByTab);
+
+    // Handle currency conversion if needed (logging only for now)
+    const priceInfo = payload?.priceInfo;
     if (priceInfo && priceInfo.currency && priceInfo.currency !== 'USD') {
       console.log(`[Honey Barrel BG] Price is not USD (${priceInfo.currency}). Attempting hardcoded conversion for ${priceInfo.value}.`);
       const convertedValue = convertCurrencyHardcoded(priceInfo.value, priceInfo.currency, 'USD');
       if (convertedValue !== null) {
-        console.log(`[Honey Barrel BG] Final Converted Price (Hardcoded): ${convertedValue.toFixed(2)} USD (Original: ${priceInfo.value.toFixed(2)} ${priceInfo.currency})`);
-        // TODO: Decide how to use/store this converted price
+        console.log(`[Honey Barrel BG] Potential Converted Price (Hardcoded): ${convertedValue.toFixed(2)} USD`);
       } else {
-        console.log(`[Honey Barrel BG] Hardcoded conversion failed or not supported for ${bottleName}.`);
+        console.log(`[Honey Barrel BG] Hardcoded conversion failed or not supported.`);
       }
-    } else if (priceInfo) {
-      console.log(`[Honey Barrel BG] Price already in USD or currency missing: ${priceInfo.value?.toFixed(2)} ${priceInfo.currency || 'N/A'}`);
-      // TODO: Decide how to use/store this price
-    } else {
-       console.log(`[Honey Barrel BG] No valid price info received for ${bottleName}.`);
     }
 
-    // IMPORTANT: This part of the listener remains synchronous for BOTTLE_INFO
-    console.log('[Honey Barrel BG] Finished processing BOTTLE_INFO (synchronous).');
+    // No response needed back to content script for this message
     return false; // Do not keep the message channel open
+
+  } else if (request.type === 'GET_LATEST_BOTTLE_INFO') {
+    console.log('[Honey Barrel BG] Processing GET_LATEST_BOTTLE_INFO request from popup.');
+    const tabId = request.tabId;
+    if (!tabId) {
+        console.warn('[Honey Barrel BG] GET_LATEST_BOTTLE_INFO request received without tabId.');
+        sendResponse({ bottleInfo: null });
+        return; // Exit early
+    }
+
+    const storedInfo = latestBottleInfoByTab[tabId];
+    console.log(`[Honey Barrel BG] Retrieved stored info for tab ${tabId}:`, storedInfo);
+    sendResponse({ bottleInfo: storedInfo || null }); // Send stored info or null
+    return; // Async response handled by sendResponse
 
   } else if (request.type === 'SEARCH_BOTTLE') {
     console.log('[Honey Barrel BG] Processing SEARCH_BOTTLE request from popup.');
     const normalizedName = request.normalizedName;
-    const tabId = request.tabId; // Get tabId from the request payload sent by popup.js
+    const tabId = request.tabId;
 
     if (!normalizedName) {
       console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without normalizedName.');
       sendResponse({ matches: [] });
-      return; // Exit early, no async response needed
+      return false; // No async response needed
     }
-
-    // Check if tabId was actually included in the request
     if (!tabId) {
         console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without tabId in payload.');
-        // We can still send results to the popup, but cannot proceed with content script message.
-        // Proceed to get matches for the popup, but log the issue.
+        // Proceed, but log the issue. Overlay won't work.
     } else {
          console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Received Tab ID from request: ${tabId}`);
     }
 
-    // Await the matches (from cache or API)
-    const matches = await getMatches(normalizedName);
-    console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Got ${matches?.length ?? 0} matches back from getMatches.`);
+    // Call the async function but handle response in .then()
+    getMatches(normalizedName).then(matches => {
+        console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Got ${matches?.length ?? 0} matches back from getMatches.`);
 
-    // Now send responses sequentially
-    console.log('[Honey Barrel BG] SEARCH_BOTTLE: Sending matches response to popup.');
-    sendResponse({ matches: matches });
+        // Send response back to the popup
+        console.log('[Honey Barrel BG] SEARCH_BOTTLE: Sending matches response to popup.');
+        sendResponse({ matches: matches });
 
-    // Send message to content script if matches exist and tabId is valid
-    if (matches && matches.length > 0 && tabId) {
-      console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Sending DISPLAY_OVERLAY message to content script in tab ${tabId}`);
-      // Use try-catch for sendMessage as it can throw if the tab is closed
-      try {
-          // We don't need to await sendMessage here, just fire and forget
-          // Awaiting might cause issues if the content script doesn't respond
-          chrome.tabs.sendMessage(
-              tabId,
-              { type: 'DISPLAY_OVERLAY', matches: matches }
-          );
-          console.log(`[Honey Barrel BG] Attempted to send DISPLAY_OVERLAY to content script (tab ${tabId}).`);
-      } catch (error) {
-           // Handle potential errors, e.g., if the tab was closed before the message arrived
-           console.warn(`[Honey Barrel BG] Error sending message to content script (tab ${tabId}): ${error.message}`);
-      }
+        // Send message to content script if matches exist and tabId is valid
+        if (matches && matches.length > 0 && tabId) {
+            console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Sending DISPLAY_OVERLAY message to content script in tab ${tabId}`);
+            try {
+                chrome.tabs.sendMessage(
+                    tabId,
+                    { type: 'DISPLAY_OVERLAY', matches: matches }
+                );
+                console.log(`[Honey Barrel BG] Attempted to send DISPLAY_OVERLAY to content script (tab ${tabId}).`);
+            } catch (error) {
+                console.warn(`[Honey Barrel BG] Error sending message to content script (tab ${tabId}): ${error.message}`);
+            }
+        } else if (!tabId) {
+            console.warn('[Honey Barrel BG] SEARCH_BOTTLE: Cannot send DISPLAY_OVERLAY message because tab ID was missing.');
+        } else {
+            console.log('[Honey Barrel BG] SEARCH_BOTTLE: No matches found or returned, not sending DISPLAY_OVERLAY message.');
+        }
+    }).catch(error => {
+        // Handle potential errors from getMatches itself
+        console.error('[Honey Barrel BG] Error during getMatches or subsequent processing:', error);
+        // Attempt to send an error response back to popup
+        try {
+            sendResponse({ error: 'Failed to get matches due to background error.' });
+        } catch (e) {
+            console.error('[Honey Barrel BG] Failed to send error response to popup:', e);
+        }
+    });
 
-    } else if (!tabId) {
-      console.warn('[Honey Barrel BG] SEARCH_BOTTLE: Cannot send DISPLAY_OVERLAY message because tab ID was missing.');
-    } else {
-      console.log('[Honey Barrel BG] SEARCH_BOTTLE: No matches found or returned, not sending DISPLAY_OVERLAY message.');
+    // Crucially, return true *immediately* to keep the message channel open
+    return true;
+
+  } else if (request.type === 'GET_LATEST_BOTTLE_INFO') {
+    console.log('[Honey Barrel BG] Processing GET_LATEST_BOTTLE_INFO request from popup.');
+    const tabId = request.tabId;
+    if (!tabId) {
+        console.warn('[Honey Barrel BG] GET_LATEST_BOTTLE_INFO request received without tabId.');
+        sendResponse({ bottleInfo: null });
+        return; // Exit early
     }
 
-    // No need to return true anymore, as the listener is async
+    const storedInfo = latestBottleInfoByTab[tabId];
+    console.log(`[Honey Barrel BG] Retrieved stored info for tab ${tabId}:`, storedInfo);
+    sendResponse({ bottleInfo: storedInfo || null }); // Send stored info or null
+    // No return true needed here as sendResponse is called synchronously within this block
     return;
 
   } else {
