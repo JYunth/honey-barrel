@@ -176,6 +176,16 @@ const siteConfigs = {
     name: 'eu.flaviar.com',
     titleSelector: 'h1',
     priceSelector: 'div.item-price-main',
+  },
+  'www.totalwine.com': { // Match hostname including www
+    name: 'totalwine.com', // Display name without www
+    titleSelector: 'h1.productTitle__28e21c67[data-at="product-name-title"]',
+    priceSelector: 'div#edlpPrice.priceTxt__4a663926',
+  },
+  'www.bevmo.com': { // Match hostname including www
+    name: 'bevmo.com', // Display name without www
+    titleSelector: 'h1',
+    priceSelector: 's.price-item.price-item--regular', // Note: Selects the strikethrough price
   }
   // Add more site configurations here as needed
 };

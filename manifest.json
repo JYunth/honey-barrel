@@ -30,11 +30,13 @@
     "*://*.uptownspirits.com/*",
     "*://*.qualityliquorstore.com/*",
     "*://*.reservebar.com/*",
-    "*://eu.flaviar.com/*"
+    "*://eu.flaviar.com/*",
+    "*://*.totalwine.com/*",
+    "*://*.bevmo.com/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.wine.com/*", "*://*.spiritory.com/*", "*://*.caskcartel.com/*", "*://*.whisky.auction/*", "*://*.caskers.com/*", "*://*.baxus.co/*", "*://*.uptownspirits.com/*", "*://*.qualityliquorstore.com/*", "*://*.reservebar.com/*", "*://eu.flaviar.com/*"],
+      "matches": ["*://*.wine.com/*", "*://*.spiritory.com/*", "*://*.caskcartel.com/*", "*://*.whisky.auction/*", "*://*.caskers.com/*", "*://*.baxus.co/*", "*://*.uptownspirits.com/*", "*://*.qualityliquorstore.com/*", "*://*.reservebar.com/*", "*://eu.flaviar.com/*", "*://*.totalwine.com/*", "*://*.bevmo.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
