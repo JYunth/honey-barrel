@@ -28,38 +28,81 @@ function convertCurrencyHardcoded(amount, fromCurrency, toCurrency) {
   }
 }
 
-// Synchronous listener
+/**
+ * Placeholder function to simulate searching Baxus listings.
+ * @param {string} bottleName - The name of the bottle to search for.
+ * @returns {Array<object>} An array of dummy match objects.
+ */
+function searchBaxusListings(bottleName) {
+  console.log(`[Honey Barrel BG] Searching Baxus (placeholder) for: ${bottleName}`);
+  // TODO: Replace with actual API call in a later commit
+  const dummyMatches = [
+    { id: 'dummy1', name: 'Dummy Match 1 (Baxus)', price: 50.00 },
+    { id: 'dummy2', name: 'Dummy Match 2 (Baxus)', price: 65.50 }
+  ];
+  console.log('[Honey Barrel BG] Returning dummy Baxus matches:', dummyMatches);
+  return dummyMatches;
+}
+
+// Variable to store the results from the last content script message
+let lastSearchedMatches = [];
+
+// Combined listener for messages from content script and popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('[Honey Barrel BG] Message listener triggered.');
+  console.log(`[Honey Barrel BG] Message listener triggered for type: ${request.type}`);
 
   if (request.type === 'BOTTLE_INFO') {
-    console.log('[Honey Barrel BG] Message type is BOTTLE_INFO.');
-    const { name, priceInfo, sourceSite } = request.payload;
-    console.log(`[Honey Barrel BG] Received BOTTLE_INFO from ${sourceSite || 'unknown site'}:`, request.payload);
+    console.log('[Honey Barrel BG] Processing BOTTLE_INFO from content script.');
+    const bottleName = request.payload?.name;
+    const sourceSite = request.payload?.sourceSite || 'unknown site';
+    console.log(`[Honey Barrel BG] Received BOTTLE_INFO from ${sourceSite}:`, request.payload);
 
+    if (bottleName) {
+      // Call the search function (currently placeholder)
+      lastSearchedMatches = searchBaxusListings(bottleName);
+      console.log('[Honey Barrel BG] Stored dummy matches for potential popup request.');
+    } else {
+      console.warn('[Honey Barrel BG] No bottle name found in BOTTLE_INFO payload.');
+      lastSearchedMatches = []; // Clear matches if no name
+    }
+
+    // Handle currency conversion if needed (keeping existing logic for now)
+    const priceInfo = request.payload?.priceInfo;
     if (priceInfo && priceInfo.currency && priceInfo.currency !== 'USD') {
       console.log(`[Honey Barrel BG] Price is not USD (${priceInfo.currency}). Attempting hardcoded conversion for ${priceInfo.value}.`);
       const convertedValue = convertCurrencyHardcoded(priceInfo.value, priceInfo.currency, 'USD');
-
       if (convertedValue !== null) {
         console.log(`[Honey Barrel BG] Final Converted Price (Hardcoded): ${convertedValue.toFixed(2)} USD (Original: ${priceInfo.value.toFixed(2)} ${priceInfo.currency})`);
-        // TODO: Store or display the converted price
+        // TODO: Decide how to use/store this converted price alongside matches
       } else {
-        console.log(`[Honey Barrel BG] Hardcoded conversion failed or not supported for ${name}.`);
+        console.log(`[Honey Barrel BG] Hardcoded conversion failed or not supported for ${bottleName}.`);
       }
     } else if (priceInfo) {
       console.log(`[Honey Barrel BG] Price already in USD or currency missing: ${priceInfo.value?.toFixed(2)} ${priceInfo.currency || 'N/A'}`);
-      // TODO: Store or display the USD price
+      // TODO: Decide how to use/store this price alongside matches
     } else {
-       console.log(`[Honey Barrel BG] No valid price info received for ${name}.`);
+       console.log(`[Honey Barrel BG] No valid price info received for ${bottleName}.`);
     }
-  } else {
-      console.log(`[Honey Barrel BG] Received message of type: ${request.type}. Ignoring.`);
-  }
 
-  // Return false as this is now a synchronous listener
-  console.log('[Honey Barrel BG] Listener finished processing (synchronous).');
-  return false;
+    // IMPORTANT: This part of the listener remains synchronous for BOTTLE_INFO
+    console.log('[Honey Barrel BG] Finished processing BOTTLE_INFO (synchronous).');
+    return false; // Do not keep the message channel open
+
+  } else if (request.type === 'SEARCH_BOTTLE') {
+    console.log('[Honey Barrel BG] Processing SEARCH_BOTTLE request from popup.');
+    // Respond with the stored matches
+    console.log('[Honey Barrel BG] Sending stored matches to popup:', lastSearchedMatches);
+    sendResponse({ matches: lastSearchedMatches });
+
+    // IMPORTANT: Return true to indicate an asynchronous response
+    console.log('[Honey Barrel BG] Sent matches to popup, keeping message channel open.');
+    return true;
+
+  } else {
+    console.log(`[Honey Barrel BG] Received unhandled message type: ${request.type}. Ignoring.`);
+    // Optional: return false explicitly if not handling other types asynchronously
+    return false;
+  }
 });
 
-console.log('[Honey Barrel BG] Service worker started and synchronous listener added.');
+console.log('[Honey Barrel BG] Service worker started and message listener added.');

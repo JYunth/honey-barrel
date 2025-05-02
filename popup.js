@@ -1,53 +1,48 @@
 document.addEventListener('DOMContentLoaded', function() {
-  const bottleNameElement = document.getElementById('bottleName');
-  const bottlePriceElement = document.getElementById('bottlePrice');
+  const matchesListElement = document.getElementById('matchesList');
 
-  // Query the active tab
-  chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+  if (!matchesListElement) {
+    console.error("Could not find #matchesList element in popup.html");
+    return; // Stop if the essential element is missing
+  }
+
+  console.log("[Honey Barrel Popup] Requesting matches from background script...");
+  matchesListElement.textContent = 'Loading matches...'; // Initial state
+
+  // Send a message directly to the background script
+  chrome.runtime.sendMessage({ type: 'SEARCH_BOTTLE' }, function(response) {
     if (chrome.runtime.lastError) {
-      console.error("Error querying tabs:", chrome.runtime.lastError.message);
-      bottleNameElement.textContent = 'Error loading data.';
+      console.error("Error sending/receiving message from background:", chrome.runtime.lastError.message);
+      matchesListElement.textContent = 'Error loading matches. Is the background script running?';
       return;
     }
 
-    if (tabs.length === 0) {
-        console.error("No active tab found.");
-        bottleNameElement.textContent = 'Could not find active tab.';
-        return;
-    }
+    console.log("[Honey Barrel Popup] Received response from background:", response);
 
-    const activeTab = tabs[0];
+    // Clear loading message
+    matchesListElement.innerHTML = ''; // Use innerHTML to clear content
 
-    // Check if the tab has a valid ID before sending a message
-    if (activeTab.id === undefined || activeTab.id === chrome.tabs.TAB_ID_NONE) {
-        console.error("Active tab has no valid ID:", activeTab);
-        bottleNameElement.textContent = 'Cannot communicate with this tab.';
-        return;
-    }
+    if (response && response.matches && Array.isArray(response.matches)) {
+      const matches = response.matches;
 
-
-    // Send a message to the content script of the active tab
-    chrome.tabs.sendMessage(activeTab.id, { type: 'GET_BOTTLE_INFO' }, function(response) {
-      if (chrome.runtime.lastError) {
-        console.error("Error sending message:", chrome.runtime.lastError.message);
-        // Display a user-friendly message if the content script isn't available (e.g., on a page where it doesn't run)
-        if (chrome.runtime.lastError.message.includes("Receiving end does not exist")) {
-             bottleNameElement.textContent = 'No bottle info found on this page.';
-        } else {
-             bottleNameElement.textContent = 'Error retrieving data.';
-        }
-        bottlePriceElement.textContent = ''; // Clear price field on error
-        return;
-      }
-
-      // Handle the response from the content script
-      if (response && response.bottleName) {
-        bottleNameElement.textContent = response.bottleName;
-        bottlePriceElement.textContent = response.bottlePrice || 'Price not found';
+      if (matches.length > 0) {
+        console.log(`[Honey Barrel Popup] Displaying ${matches.length} matches.`);
+        const list = document.createElement('ul');
+        matches.forEach(match => {
+          const listItem = document.createElement('li');
+          // Display name and price (ensure price is formatted)
+          const priceString = typeof match.price === 'number' ? `$${match.price.toFixed(2)}` : 'Price N/A';
+          listItem.textContent = `${match.name} - ${priceString}`;
+          list.appendChild(listItem);
+        });
+        matchesListElement.appendChild(list);
       } else {
-        bottleNameElement.textContent = 'No bottle info found.';
-        bottlePriceElement.textContent = '';
+        console.log("[Honey Barrel Popup] No matches found.");
+        matchesListElement.textContent = 'No matches found.';
       }
-    });
+    } else {
+      console.error("[Honey Barrel Popup] Invalid response format received from background:", response);
+      matchesListElement.textContent = 'Failed to get matches (invalid response).';
+    }
   });
 });

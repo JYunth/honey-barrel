@@ -1,19 +1,38 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Honey Barrel Info</title>
+    <title>Honey Barrel Matches</title>
     <meta charset="utf-8">
     <style>
         body {
-            width: 200px;
+            width: 250px; /* Slightly wider for list */
             font-family: sans-serif;
+            font-size: 14px;
+        }
+        h1 {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        #matchesList {
+            min-height: 50px; /* Ensure space even when loading */
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            padding: 4px 0;
+            border-bottom: 1px solid #eee;
+        }
+        li:last-child {
+            border-bottom: none;
         }
     </style>
 </head>
 <body>
-    <h1>Honey Barrel Info</h1>
-    <div id="bottleName">Loading...</div>
-    <div id="bottlePrice"></div>
+    <h1>Honey Barrel Matches</h1>
+    <div id="matchesList">Loading matches...</div>
     <script src="popup.js"></script>
 </body>
 </html>
