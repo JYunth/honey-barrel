@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Honey Barrel",
+  "description": "Compares wine & spirits prices across retail sites and the BAXUS marketplace.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "Honey Barrel"
+  }
+}
