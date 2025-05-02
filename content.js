@@ -19,6 +19,26 @@ const siteConfigs = {
     name: 'spiritory.com',
     titleSelector: 'h1, .product-name, .text-breadcrumbs-active', // Use the first one found
     priceSelector: 'h2.tw-pt-3.tw-text-3xl.tw-font-medium.tw-text-text', // Updated selector for H2 element
+  },
+  'caskcartel.com': {
+    name: 'caskcartel.com',
+    titleSelector: 'h1.product-title',
+    priceSelector: 'strong.price__current', // Updated based on user feedback
+  },
+  'whisky.auction': {
+    name: 'whisky.auction',
+    titleSelector: 'span.lotName1.line-1', // Updated based on user feedback
+    priceSelector: 'span.winningBid', // Updated based on user feedback
+  },
+  'www.caskers.com': { // Updated key to include 'www.'
+    name: 'caskers.com', // Keep name without www for display/logging
+    titleSelector: 'span[itemprop="name"]', // Updated based on user feedback
+    priceSelector: 'span.price', // Updated based on user feedback
+  },
+  'www.baxus.co': { // Updated key to include 'www.'
+    name: 'baxus.co', // Keep name without www for display/logging
+    titleSelector: 'h1.h1.text-gray1', // Updated based on user feedback
+    priceSelector: 'p.xsm\\:numbers-medium.md-numbers-large.text-gray1', // Updated based on user feedback (escaped colon)
   }
 };
 

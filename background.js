@@ -50,10 +50,11 @@ function calculateSimilarity(str1, str2) {
 
 // Hardcoded conversion rate (Update this value as needed)
 // TODO: Get latest rate from user or find a more dynamic solution later.
-const EUR_TO_USD_RATE = 1.14; // Example: 1 EUR = 1.1 USD
+const EUR_TO_USD_RATE = 1.14; // Example: 1 EUR = 1.14 USD
+const GBP_TO_USD_RATE = 1.33; // Example: 1 GBP = 1.33 USD
 
 /**
- * Converts an amount from EUR to USD using a hardcoded rate.
+ * Converts an amount from EUR or GBP to USD using hardcoded rates.
  * Other conversions are not supported in this simplified version.
  * @param {number} amount - The amount to convert.
  * @param {string} fromCurrency - The 3-letter currency code to convert from (should be 'EUR').
@@ -72,8 +73,12 @@ function convertCurrencyHardcoded(amount, fromCurrency, toCurrency) {
     const convertedAmount = amount * EUR_TO_USD_RATE;
     console.log(`[Honey Barrel BG] Hardcoded Conversion successful: ${amount} * ${EUR_TO_USD_RATE} = ${convertedAmount.toFixed(2)} ${toCurrency}`);
     return convertedAmount;
+  } else if (fromCurrency === 'GBP' && toCurrency === 'USD') {
+    const convertedAmount = amount * GBP_TO_USD_RATE;
+    console.log(`[Honey Barrel BG] Hardcoded Conversion successful: ${amount} * ${GBP_TO_USD_RATE} = ${convertedAmount.toFixed(2)} ${toCurrency}`);
+    return convertedAmount;
   } else {
-    console.warn(`[Honey Barrel BG] Hardcoded conversion only supports EUR to USD. Cannot convert ${fromCurrency} to ${toCurrency}.`);
+    console.warn(`[Honey Barrel BG] Hardcoded conversion only supports EUR to USD and GBP to USD. Cannot convert ${fromCurrency} to ${toCurrency}.`);
     return null; // Indicate unsupported conversion
   }
 }
