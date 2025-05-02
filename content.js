@@ -43,9 +43,11 @@ const siteConfigs = {
 };
 
 // Variables to store the last extracted info
-let lastBottleName = null;
-let lastBottlePrice = null; // Store the raw price string for simplicity now
-let lastNormalizedName = null; // Store the normalized name
+let currentBottleInfo = { // Store info for potential overlay use
+    name: null,
+    price: null, // Store the raw price string
+    normalizedName: null
+};
 
 /**
 * Gets the configuration for the current site based on the hostname.
@@ -77,10 +79,10 @@ function parsePrice(rawPrice) {
 function processAndSendData(name, priceInfo, rawPrice, config) { // Added rawPrice parameter
  const normalizedName = normalizeBottleName(name); // Normalize the name
 
- // Update last known values
- lastBottleName = name;
- lastBottlePrice = rawPrice; // Store the raw string as requested by popup
- lastNormalizedName = normalizedName; // Store the normalized name
+    // Update last known values
+    currentBottleInfo.name = name;
+    currentBottleInfo.price = rawPrice; // Store the raw string
+    currentBottleInfo.normalizedName = normalizedName;
 
  if (name) {
    console.log(`Honey Barrel: Found Name - ${name}`);
@@ -188,25 +190,122 @@ if (currentSiteConfig) {
   console.log("Honey Barrel: No configuration found for this site.");
 }
 
-// --- Message Listener for Popup Requests ---
+// --- Overlay Function ---
+function createComparisonOverlay(matches, bottleInfo) {
+    // Remove existing overlay first
+    const existingOverlay = document.getElementById('honey-barrel-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+    }
+
+    if (!matches || matches.length === 0 || !bottleInfo || !bottleInfo.price) {
+        console.log("Honey Barrel: Not creating overlay - missing matches or current price.");
+        return;
+    }
+
+    const bestMatch = matches[0]; // Highest similarity match
+
+    // Create overlay container
+    const overlay = document.createElement('div');
+    overlay.id = 'honey-barrel-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: white;
+        border: 1px solid #ccc;
+        padding: 15px;
+        z-index: 9999;
+        font-family: sans-serif;
+        font-size: 14px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        border-radius: 4px;
+        color: #333;
+        min-width: 200px;
+    `;
+
+    // Header
+    const header = document.createElement('h3');
+    header.textContent = 'Honey Barrel Comparison';
+    header.style.cssText = 'margin-top: 0; margin-bottom: 10px; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 5px;';
+    overlay.appendChild(header);
+
+    // Current Price
+    const currentPriceP = document.createElement('p');
+    currentPriceP.textContent = `Current: ${bottleInfo.price}`; // Use the raw price string
+    currentPriceP.style.cssText = 'margin: 5px 0;';
+    overlay.appendChild(currentPriceP);
+
+    // Baxus Price
+    const baxusPriceP = document.createElement('p');
+    // Assuming bestMatch.price is already formatted like "$XXX.XX"
+    baxusPriceP.textContent = `Baxus: ${bestMatch.price || 'N/A'}`;
+    baxusPriceP.style.cssText = 'margin: 5px 0;';
+    overlay.appendChild(baxusPriceP);
+
+    // Baxus Link
+    const baxusLink = document.createElement('a');
+    baxusLink.href = `https://baxus.co/asset/${bestMatch.id}`;
+    baxusLink.textContent = 'View on Baxus';
+    baxusLink.target = '_blank'; // Open in new tab
+    baxusLink.style.cssText = 'color: #007bff; text-decoration: none; display: block; margin-top: 10px;';
+    overlay.appendChild(baxusLink);
+
+    // Close Button
+    const closeButton = document.createElement('button');
+    closeButton.textContent = 'X';
+    closeButton.style.cssText = `
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background: none;
+        border: none;
+        font-size: 16px;
+        cursor: pointer;
+        color: #aaa;
+        padding: 5px;
+        line-height: 1;
+    `;
+    closeButton.onclick = () => {
+        overlay.remove();
+    };
+    overlay.appendChild(closeButton);
+
+    // Append overlay to body
+    document.body.appendChild(overlay);
+    console.log("Honey Barrel: Comparison overlay created.");
+}
+
+
+// --- Message Listener for Popup and Background Requests ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
- console.log("Honey Barrel (content): Received message:", request);
- if (request.type === 'GET_BOTTLE_INFO') {
-   // Re-parse the stored raw price to create the structured priceInfo object
-   const priceInfo = parsePrice(lastBottlePrice);
-   console.log("Honey Barrel (content): Sending response:", { bottleInfo: { name: lastBottleName, priceInfo: priceInfo } });
-   // Respond with the last known bottle info in the structure popup.js expects
-   sendResponse({
-       bottleInfo: {
-           name: lastBottleName,
-           priceInfo: priceInfo, // Send the parsed price info object
-           normalizedName: lastNormalizedName // Send the normalized name
-       }
-   });
-   // Return true to indicate you wish to send a response asynchronously
-   // (although in this simple case it's synchronous, it's good practice)
-   return true;
- }
- // Handle other message types if needed in the future
- return false; // Indicate synchronous response or no response for other types
+    console.log("Honey Barrel (content): Received message:", request);
+
+    if (request.type === 'GET_BOTTLE_INFO') {
+        // Re-parse the stored raw price to create the structured priceInfo object
+        const priceInfo = parsePrice(currentBottleInfo.price);
+        console.log("Honey Barrel (content): Sending response for GET_BOTTLE_INFO:", { bottleInfo: { name: currentBottleInfo.name, priceInfo: priceInfo, normalizedName: currentBottleInfo.normalizedName } });
+        // Respond with the last known bottle info
+        sendResponse({
+            bottleInfo: {
+                name: currentBottleInfo.name,
+                priceInfo: priceInfo, // Send the parsed price info object
+                normalizedName: currentBottleInfo.normalizedName // Send the normalized name
+            }
+        });
+        return true; // Indicate async response
+    } else if (request.type === 'DISPLAY_OVERLAY') {
+        console.log("Honey Barrel (content): Received DISPLAY_OVERLAY message with matches:", request.matches);
+        if (request.matches && request.matches.length > 0) {
+            // Use the globally stored currentBottleInfo
+            createComparisonOverlay(request.matches, currentBottleInfo);
+        } else {
+            console.log("Honey Barrel (content): No matches received, not displaying overlay.");
+        }
+        // No response needed for this message type
+        return false;
+    }
+
+    // Indicate synchronous response or no response for other types
+    return false;
 });

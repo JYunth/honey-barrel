@@ -173,9 +173,34 @@ async function searchBaxusListings(normalizedQueryName) {
 }
 
 
-// Combined listener for messages from content script and popup
-// Note: The listener function itself needs to handle async responses correctly.
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+// --- Async Function to Get Matches (Cache or API) ---
+async function getMatches(normalizedName) {
+  console.log(`[Honey Barrel BG] getMatches called for: "${normalizedName}"`);
+  const cacheKey = 'baxus_search_' + normalizedName;
+
+  // Check cache first
+  try {
+    const cachedData = await chrome.storage.local.get(cacheKey);
+    if (cachedData[cacheKey] && (Date.now() - cachedData[cacheKey].timestamp < CACHE_DURATION_MS)) {
+      console.log(`[Honey Barrel BG] getMatches: Using cached results for key: ${cacheKey}`);
+      return cachedData[cacheKey].results; // Return cached matches
+    } else {
+      console.log(`[Honey Barrel BG] getMatches: No valid cache found for key: ${cacheKey}. Fetching fresh data.`);
+    }
+  } catch (error) {
+    console.error(`[Honey Barrel BG] getMatches: Error retrieving cache for key ${cacheKey}:`, error);
+    // Proceed to fetch fresh data if cache retrieval fails
+  }
+
+  // Fetch from API if cache miss or error
+  console.log(`[Honey Barrel BG] getMatches: Calling searchBaxusListings for normalized name: "${normalizedName}"`);
+  const results = await searchBaxusListings(normalizedName);
+  return results; // Return fetched matches
+}
+
+
+// --- Combined listener for messages (now async) ---
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => { // Make the listener async
   console.log(`[Honey Barrel BG] Message listener triggered for type: ${request.type}`);
 
   if (request.type === 'BOTTLE_INFO') {
@@ -214,44 +239,57 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   } else if (request.type === 'SEARCH_BOTTLE') {
     console.log('[Honey Barrel BG] Processing SEARCH_BOTTLE request from popup.');
-    const normalizedName = request.normalizedName; // Expect normalizedName from the request
+    const normalizedName = request.normalizedName;
+    const tabId = request.tabId; // Get tabId from the request payload sent by popup.js
 
     if (!normalizedName) {
-        console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without normalizedName.');
-        sendResponse({ matches: [] }); // Send empty array if no name provided
-        return false; // No async operation needed here, sendResponse was synchronous
+      console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without normalizedName.');
+      sendResponse({ matches: [] });
+      return; // Exit early, no async response needed
     }
 
-    // Use an IIFE (Immediately Invoked Function Expression) to handle the async operation
-    // This allows the main listener function to return `true` immediately.
-    (async () => {
-      // --- Start Commit 9: Cache Check ---
-      const cacheKey = 'baxus_search_' + normalizedName;
+    // Check if tabId was actually included in the request
+    if (!tabId) {
+        console.warn('[Honey Barrel BG] SEARCH_BOTTLE request received without tabId in payload.');
+        // We can still send results to the popup, but cannot proceed with content script message.
+        // Proceed to get matches for the popup, but log the issue.
+    } else {
+         console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Received Tab ID from request: ${tabId}`);
+    }
+
+    // Await the matches (from cache or API)
+    const matches = await getMatches(normalizedName);
+    console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Got ${matches?.length ?? 0} matches back from getMatches.`);
+
+    // Now send responses sequentially
+    console.log('[Honey Barrel BG] SEARCH_BOTTLE: Sending matches response to popup.');
+    sendResponse({ matches: matches });
+
+    // Send message to content script if matches exist and tabId is valid
+    if (matches && matches.length > 0 && tabId) {
+      console.log(`[Honey Barrel BG] SEARCH_BOTTLE: Sending DISPLAY_OVERLAY message to content script in tab ${tabId}`);
+      // Use try-catch for sendMessage as it can throw if the tab is closed
       try {
-        const cachedData = await chrome.storage.local.get(cacheKey);
-        if (cachedData[cacheKey] && (Date.now() - cachedData[cacheKey].timestamp < CACHE_DURATION_MS)) {
-          console.log(`[Honey Barrel BG] Using cached results for key: ${cacheKey}`);
-          sendResponse({ matches: cachedData[cacheKey].results });
-          return; // Return early as we sent the cached response
-        } else {
-           console.log(`[Honey Barrel BG] No valid cache found for key: ${cacheKey}. Fetching fresh data.`);
-        }
+          // We don't need to await sendMessage here, just fire and forget
+          // Awaiting might cause issues if the content script doesn't respond
+          chrome.tabs.sendMessage(
+              tabId,
+              { type: 'DISPLAY_OVERLAY', matches: matches }
+          );
+          console.log(`[Honey Barrel BG] Attempted to send DISPLAY_OVERLAY to content script (tab ${tabId}).`);
       } catch (error) {
-        console.error(`[Honey Barrel BG] Error retrieving cache for key ${cacheKey}:`, error);
-        // Proceed to fetch fresh data if cache retrieval fails
+           // Handle potential errors, e.g., if the tab was closed before the message arrived
+           console.warn(`[Honey Barrel BG] Error sending message to content script (tab ${tabId}): ${error.message}`);
       }
-      // --- End Commit 9 ---
 
-      console.log(`[Honey Barrel BG] Calling async searchBaxusListings for normalized name: "${normalizedName}"`);
-      const results = await searchBaxusListings(normalizedName); // Pass normalizedName
-      console.log('[Honey Barrel BG] Sending search results back to popup:', results);
-      // Send the extracted _source objects
-      sendResponse({ matches: results });
-    })();
+    } else if (!tabId) {
+      console.warn('[Honey Barrel BG] SEARCH_BOTTLE: Cannot send DISPLAY_OVERLAY message because tab ID was missing.');
+    } else {
+      console.log('[Honey Barrel BG] SEARCH_BOTTLE: No matches found or returned, not sending DISPLAY_OVERLAY message.');
+    }
 
-    // IMPORTANT: Return true to indicate an asynchronous response will be sent
-    console.log('[Honey Barrel BG] Returned true to keep message channel open for async SEARCH_BOTTLE response.');
-    return true;
+    // No need to return true anymore, as the listener is async
+    return;
 
   } else {
     console.log(`[Honey Barrel BG] Received unhandled message type: ${request.type}. Ignoring.`);

@@ -48,8 +48,8 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`[Honey Barrel Popup] Got bottle name: "${bottleName}" (Normalized: "${normalizedName}"), Price: ${currentPrice ?? 'N/A'}. Requesting search from background...`);
         matchesListElement.textContent = `Searching Baxus for "${bottleName}"...`; // Display original name
 
-        // Step 2: Send search request to the background script with the NORMALIZED name
-        chrome.runtime.sendMessage({ type: 'SEARCH_BOTTLE', normalizedName: normalizedName }, function(searchResponse) {
+        // Step 2: Send search request to the background script with the NORMALIZED name AND the tab ID
+        chrome.runtime.sendMessage({ type: 'SEARCH_BOTTLE', normalizedName: normalizedName, tabId: activeTabId }, function(searchResponse) { // Add tabId here
           if (chrome.runtime.lastError) {
             console.error("[Honey Barrel Popup] Error receiving search results from background:", chrome.runtime.lastError.message);
             matchesListElement.textContent = 'Error getting search results.';
