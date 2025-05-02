@@ -361,23 +361,24 @@ function createComparisonOverlay(matches, bottleInfo) {
     const overlay = document.createElement('div');
     overlay.id = 'honey-barrel-overlay';
     // Enhanced styling
+    // Apply styles using CSS variables from popup.html
     overlay.style.cssText = `
         position: fixed;
         bottom: 20px;
         right: 20px;
-        background: linear-gradient(145deg, #ffffff, #f0f0f0); /* Subtle gradient */
-        border: 1px solid #e0e0e0;
+        background-color: var(--bg-color, #FDFBF5); /* Use CSS var with fallback */
+        border: 1px solid var(--border-color, #EAE0D5);
         padding: 18px;
         z-index: 9999;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Nicer font */
+        font-family: var(--font-sans, sans-serif); /* Use CSS var */
         font-size: 14px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* Softer shadow */
-        border-radius: 8px; /* More rounded corners */
-        color: #333;
-        min-width: 240px; /* Slightly wider */
+        box-shadow: var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.08)); /* Use CSS var */
+        border-radius: var(--radius, 12px); /* Use CSS var */
+        color: var(--text-color, #5C3A21); /* Use CSS var */
+        min-width: 240px;
         max-width: 300px;
         line-height: 1.5;
-        transition: transform 0.3s ease-out; /* Add transition for potential future animations */
+        transition: transform 0.3s ease-out;
     `;
 
     // Header
@@ -387,18 +388,17 @@ function createComparisonOverlay(matches, bottleInfo) {
         align-items: center;
         margin-bottom: 12px;
         padding-bottom: 8px;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid var(--border-color, #EAE0D5); /* Use CSS var */
     `;
-    // Simple Logo/Icon (Placeholder) - Replace 'path/to/icon.png' if you have one
-    const logo = document.createElement('img');
-    logo.src = chrome.runtime.getURL('images/icon48.png'); // Use extension icon
-    logo.alt = 'HB';
-    logo.style.cssText = 'width: 24px; height: 24px; margin-right: 8px;';
-    header.appendChild(logo);
+    // Replace image with Emoji
+    const logoEmoji = document.createElement('span');
+    logoEmoji.textContent = '🍾';
+    logoEmoji.style.cssText = 'font-size: 24px; margin-right: 8px; line-height: 1;'; // Adjust styling for emoji
+    header.appendChild(logoEmoji);
 
     const title = document.createElement('h3');
-    title.textContent = 'Honey Barrel Price Check';
-    title.style.cssText = 'margin: 0; font-size: 16px; font-weight: 600; color: #444;';
+    title.textContent = 'Honey Price Check';
+    title.style.cssText = 'margin: 0; font-size: 16px; font-weight: 600; color: var(--primary-color, #5C3A21);'; /* Use CSS var */
     header.appendChild(title);
     overlay.appendChild(header);
 
@@ -411,10 +411,10 @@ function createComparisonOverlay(matches, bottleInfo) {
     currentPriceDiv.style.cssText = 'text-align: left;';
     const currentLabel = document.createElement('div');
     currentLabel.textContent = 'Current Site';
-    currentLabel.style.cssText = 'font-size: 12px; color: #666; margin-bottom: 2px;';
+    currentLabel.style.cssText = 'font-size: 12px; color: var(--text-light, #8A7460); margin-bottom: 2px;'; /* Use CSS var */
     const currentValue = document.createElement('div');
     currentValue.textContent = `$${currentPrice.toFixed(2)}`;
-    currentValue.style.cssText = 'font-size: 16px; font-weight: 500; color: #555;';
+    currentValue.style.cssText = 'font-size: 16px; font-weight: 500; color: var(--text-color, #5C3A21);'; /* Use CSS var */
     currentPriceDiv.appendChild(currentLabel);
     currentPriceDiv.appendChild(currentValue);
     priceSection.appendChild(currentPriceDiv);
@@ -424,45 +424,37 @@ function createComparisonOverlay(matches, bottleInfo) {
     baxusPriceDiv.style.cssText = 'text-align: right;';
     const baxusLabel = document.createElement('div');
     baxusLabel.textContent = 'on BAXUS';
-    baxusLabel.style.cssText = 'font-size: 12px; color: #666; margin-bottom: 2px;';
+    baxusLabel.style.cssText = 'font-size: 12px; color: var(--text-light, #8A7460); margin-bottom: 2px;'; /* Use CSS var */
     const baxusValue = document.createElement('div');
     baxusValue.textContent = `$${baxusPrice.toFixed(2)}`;
-    baxusValue.style.cssText = 'font-size: 18px; font-weight: 600; color: #007bff;'; // Make Baxus price stand out
+    // Using button background color for emphasis, as it's a key action-related price
+    baxusValue.style.cssText = 'font-size: 18px; font-weight: 600; color: var(--button-bg, #1C6D72);'; /* Use CSS var */
     baxusPriceDiv.appendChild(baxusLabel);
     baxusPriceDiv.appendChild(baxusValue);
     priceSection.appendChild(baxusPriceDiv);
 
     overlay.appendChild(priceSection);
 
-    // Savings/Difference Message
-    const savingsDiv = document.createElement('div');
-    savingsDiv.style.cssText = `
-        text-align: center;
-        margin-bottom: 15px;
-        padding: 8px;
-        border-radius: 4px;
-        font-weight: 600;
-    `;
+    // Savings Message - Only show if there's a saving > $0.01
     if (priceDiff > 0.01) { // Use a small threshold for floating point comparison
+        const savingsDiv = document.createElement('div');
         savingsDiv.textContent = `Save $${priceDiff.toFixed(2)} on BAXUS!`;
-        savingsDiv.style.backgroundColor = '#d4edda'; // Light green background
-        savingsDiv.style.color = '#155724'; // Dark green text
-        savingsDiv.style.border = '1px solid #c3e6cb';
-    } else if (priceDiff < -0.01) {
-        savingsDiv.textContent = `Costs $${Math.abs(priceDiff).toFixed(2)} more on BAXUS`;
-        savingsDiv.style.backgroundColor = '#f8d7da'; // Light red background
-        savingsDiv.style.color = '#721c24'; // Dark red text
-        savingsDiv.style.border = '1px solid #f5c6cb';
-    } else {
-        savingsDiv.textContent = 'Same price on BAXUS';
-        savingsDiv.style.backgroundColor = '#e2e3e5'; // Light gray background
-        savingsDiv.style.color = '#383d41'; // Dark gray text
-        savingsDiv.style.border = '1px solid #d6d8db';
+        savingsDiv.style.cssText = `
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 8px;
+            border-radius: var(--radius, 12px); /* Use CSS var */
+            font-weight: 600;
+            background-color: var(--savings-bg, #E8F5E9); /* Use CSS var */
+            color: var(--savings-color-text, #388E3C); /* Use CSS var */
+            border: 1px solid var(--border-color, #EAE0D5); /* Use CSS var for consistency */
+        `;
+        overlay.appendChild(savingsDiv); // Append only if condition met
     }
-    overlay.appendChild(savingsDiv);
+    // Removed the 'else if' (costs more) and 'else' (same price) blocks
 
 
-    // Baxus Link (Button style)
+    // Baxus Link (Button style) - Always shown
     const baxusLink = document.createElement('a');
     baxusLink.href = `https://baxus.co/asset/${bestMatch.id}`;
     baxusLink.textContent = 'View on BAXUS →';
@@ -470,17 +462,21 @@ function createComparisonOverlay(matches, bottleInfo) {
     baxusLink.style.cssText = `
         display: block;
         text-align: center;
-        background-color: #007bff;
-        color: white;
+        background-color: var(--button-bg, #1C6D72); /* Use CSS var */
+        color: var(--button-text, #FDFBF5); /* Use CSS var */
         padding: 10px 15px;
-        border-radius: 5px;
+        border-radius: var(--radius, 12px); /* Use CSS var */
         text-decoration: none;
-        font-weight: 500;
+        font-weight: 600; /* Make slightly bolder */
         transition: background-color 0.2s ease;
         margin-top: 10px; /* Ensure space above */
+        border: none; /* Ensure no default border */
     `;
-    baxusLink.onmouseover = () => baxusLink.style.backgroundColor = '#0056b3';
-    baxusLink.onmouseout = () => baxusLink.style.backgroundColor = '#007bff';
+    // Use CSS variables for hover effect
+    const buttonBg = 'var(--button-bg, #1C6D72)';
+    const buttonHoverBg = 'var(--button-hover-bg, #458D91)';
+    baxusLink.onmouseover = () => baxusLink.style.backgroundColor = buttonHoverBg;
+    baxusLink.onmouseout = () => baxusLink.style.backgroundColor = buttonBg;
     overlay.appendChild(baxusLink);
 
     // Close Button (Improved)
@@ -488,15 +484,15 @@ function createComparisonOverlay(matches, bottleInfo) {
     closeButton.innerHTML = '&times;'; // Use HTML entity for 'X'
     closeButton.style.cssText = `
         position: absolute;
-        top: 8px; /* Adjusted position */
-        right: 8px; /* Adjusted position */
+        top: 8px;
+        right: 8px;
         background: transparent;
         border: none;
-        font-size: 22px; /* Larger size */
+        font-size: 22px;
         font-weight: bold;
         cursor: pointer;
-        color: #aaa;
-        padding: 0 5px; /* Minimal padding */
+        color: var(--text-light, #8A7460); /* Use CSS var */
+        padding: 0 5px;
         line-height: 1;
         transition: color 0.2s ease;
     `;
