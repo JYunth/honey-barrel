@@ -279,18 +279,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'GET_LATEST_BOTTLE_INFO': {
       // Popup is requesting the stored bottle info for a specific tab.
-      // console.log('[Honey Barrel BG] Processing GET_LATEST_BOTTLE_INFO request from popup.'); // Debug log removed
       const tabId = request.tabId;
       if (!tabId) {
           console.warn('[Honey Barrel BG] GET_LATEST_BOTTLE_INFO request received without tabId.');
           sendResponse({ bottleInfo: null });
-          return; // Exit early
+          return false; // Indicate synchronous handling (error case)
       }
 
       const storedInfo = latestBottleInfoByTab[tabId];
-      // console.log(`[Honey Barrel BG] Retrieved stored info for tab ${tabId}:`, storedInfo); // Debug log removed
-      sendResponse({ bottleInfo: storedInfo || null }); // Send stored info or null
-      return; // Response sent synchronously.
+
+      if (storedInfo) {
+          // Info found immediately, send it back
+          // console.log(`[Honey Barrel BG] GET_LATEST_BOTTLE_INFO: Found info immediately for tab ${tabId}.`); // Debug log removed
+          sendResponse({ bottleInfo: storedInfo });
+          return false; // Indicate synchronous handling
+      } else {
+          // Info not found, wait briefly and check again (async)
+          // console.log(`[Honey Barrel BG] GET_LATEST_BOTTLE_INFO: Info not found for tab ${tabId}. Waiting 500ms...`); // Debug log removed
+          setTimeout(() => {
+              const delayedStoredInfo = latestBottleInfoByTab[tabId];
+              // console.log(`[Honey Barrel BG] GET_LATEST_BOTTLE_INFO: Sending response after 500ms delay for tab ${tabId}. Info found: ${!!delayedStoredInfo}`); // Debug log removed
+              sendResponse({ bottleInfo: delayedStoredInfo || null });
+          }, 500); // Wait 500 milliseconds
+
+          return true; // Indicate ASYNCHRONOUS response handling
+      }
     }
 
     case 'SEARCH_BOTTLE': {
@@ -358,6 +371,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const tabId = sender.tab?.id;
       const payload = request.payload;
 
+      // Store the received info immediately, even before conversion attempt
+      if (tabId && payload) {
+          latestBottleInfoByTab[tabId] = payload;
+          console.log(`[Honey Barrel BG] Stored preliminary INR info for tab ${tabId}.`);
+      }
+
       if (!tabId || !payload || !payload.priceInfo || payload.priceInfo.currency !== 'INR') {
         console.warn('[Honey Barrel BG] Invalid REQUEST_INR_CONVERSION received:', request);
         return false; // Invalid request
@@ -387,6 +406,51 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
       } else {
         console.error(`[Honey Barrel BG] Failed to convert INR price for tab ${tabId}:`, originalPriceInfo);
+        // Optionally send an error message back to content script? For now, just log.
+      }
+      return false; // Indicate synchronous handling (message sent via chrome.tabs.sendMessage)
+    }
+case 'REQUEST_EUR_CONVERSION': {
+      // Content script sent EUR price info and needs it converted to USD.
+      console.log('[Honey Barrel BG] Processing REQUEST_EUR_CONVERSION from content script.');
+      const tabId = sender.tab?.id;
+      const payload = request.payload;
+
+      // Store the received info immediately, even before conversion attempt
+      if (tabId && payload) {
+          latestBottleInfoByTab[tabId] = payload;
+          console.log(`[Honey Barrel BG] Stored preliminary EUR info for tab ${tabId}.`);
+      }
+
+      if (!tabId || !payload || !payload.priceInfo || payload.priceInfo.currency !== 'EUR') {
+        console.warn('[Honey Barrel BG] Invalid REQUEST_EUR_CONVERSION received:', request);
+        return false; // Invalid request
+      }
+
+      const originalPriceInfo = payload.priceInfo;
+      const convertedValue = convertCurrencyHardcoded(originalPriceInfo.value, 'EUR', 'USD');
+
+      if (convertedValue !== null) {
+        const convertedPriceInfo = {
+          value: parseFloat(convertedValue.toFixed(2)), // Ensure it's a number with 2 decimal places
+          currency: 'USD'
+        };
+
+        // Send the converted info back to the specific content script tab
+        console.log(`[Honey Barrel BG] Sending CONVERTED_PRICE_INFO back to tab ${tabId}`);
+        try {
+          chrome.tabs.sendMessage(tabId, {
+            type: 'CONVERTED_PRICE_INFO',
+            payload: {
+              ...payload, // Include original name, normalizedName, sourceSite
+              priceInfo: convertedPriceInfo // Overwrite with the converted price info
+            }
+          });
+        } catch (error) {
+          console.warn(`[Honey Barrel BG] Error sending CONVERTED_PRICE_INFO message to content script (tab ${tabId}): ${error.message}`);
+        }
+      } else {
+        console.error(`[Honey Barrel BG] Failed to convert EUR price for tab ${tabId}:`, originalPriceInfo);
         // Optionally send an error message back to content script? For now, just log.
       }
       return false; // Indicate synchronous handling (message sent via chrome.tabs.sendMessage)

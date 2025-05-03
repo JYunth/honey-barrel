@@ -342,6 +342,111 @@ function parsePrice(rawPrice) {
  * @param {string|null} rawPrice - The original raw price string.
  * @param {object} config - The site configuration object used for extraction.
  */
+/**
+ * Creates and displays a preliminary overlay indicating that price checking is in progress.
+ * This is shown immediately after product info is extracted.
+ */
+function showPreliminaryOverlay() {
+    // Remove existing overlay first (both preliminary and final)
+    const existingOverlay = document.getElementById('honey-barrel-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+    }
+
+    // --- Build Preliminary Overlay DOM ---
+    const overlay = document.createElement('div');
+    overlay.id = 'honey-barrel-overlay'; // Use the same ID so it can be updated
+    // Apply base styles (similar to createComparisonOverlay)
+    overlay.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: var(--bg-color, #FDFBF5);
+        border: 1px solid var(--border-color, #EAE0D5);
+        padding: 18px;
+        z-index: 9999;
+        font-family: var(--font-sans, sans-serif);
+        font-size: 14px;
+        box-shadow: var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.08));
+        border-radius: var(--radius, 12px);
+        color: var(--text-color, #5C3A21);
+        min-width: 240px;
+        max-width: 300px;
+        line-height: 1.5;
+        transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+        opacity: 0; /* Start hidden */
+        transform: translateY(10px); /* Start lower */
+    `;
+
+    // Header Section (same as final overlay)
+    const header = document.createElement('div');
+    header.style.cssText = `
+        display: flex;
+        align-items: center;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border-color, #EAE0D5);
+    `;
+    const logoEmoji = document.createElement('span');
+    logoEmoji.textContent = '🍾';
+    logoEmoji.style.cssText = 'font-size: 24px; margin-right: 8px; line-height: 1;';
+    header.appendChild(logoEmoji);
+
+    const title = document.createElement('h3');
+    title.textContent = 'Honey Price Check';
+    title.style.cssText = 'margin: 0; font-size: 16px; font-weight: 600; color: var(--primary-color, #5C3A21);';
+    header.appendChild(title);
+    overlay.appendChild(header);
+
+    // "Checking" Message
+    const checkingMessage = document.createElement('div');
+    checkingMessage.id = 'honey-barrel-checking-message'; // ID to easily replace later
+    checkingMessage.textContent = 'Honey Barrel: Checking page...';
+    checkingMessage.style.cssText = `
+        text-align: center;
+        padding: 15px 0;
+        color: var(--text-light, #8A7460);
+    `;
+    overlay.appendChild(checkingMessage);
+
+    // Close Button (same as final overlay)
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '&times;';
+    closeButton.setAttribute('aria-label', 'Close price check');
+    closeButton.style.cssText = `
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: transparent;
+        border: none;
+        font-size: 22px;
+        font-weight: bold;
+        cursor: pointer;
+        color: var(--text-light, #8A7460);
+        padding: 0 5px;
+        line-height: 1;
+        transition: color 0.2s ease;
+    `;
+    closeButton.onmouseover = () => closeButton.style.color = 'var(--text-color, #5C3A21)';
+    closeButton.onmouseout = () => closeButton.style.color = 'var(--text-light, #8A7460)';
+    closeButton.onclick = (e) => {
+        e.stopPropagation(); // Prevent triggering other actions if needed
+        overlay.style.opacity = '0';
+        overlay.style.transform = 'scale(0.9)';
+        setTimeout(() => overlay.remove(), 200);
+    };
+    overlay.appendChild(closeButton);
+
+    // --- Append and Animate In ---
+    document.body.appendChild(overlay);
+    console.log("Honey Barrel: Preliminary overlay created.");
+
+    // Trigger fade-in/slide-in animation
+    requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        overlay.style.transform = 'translateY(0)';
+    });
+}
 function processAndSendData(name, priceInfo, rawPrice, config) {
  const normalizedName = name ? normalizeBottleName(name) : null; // Normalize only if name exists
 
@@ -365,10 +470,13 @@ function processAndSendData(name, priceInfo, rawPrice, config) {
 
   // Send data to background script only if we have both a name and valid price info
   if (name && priceInfo) {
-    // If currency is INR, request conversion first
+    // Show preliminary overlay immediately
+    showPreliminaryOverlay(); // Call the new function here
+
+    // Request conversion for specific currencies before sending final info
     if (priceInfo.currency === 'INR') {
         console.log('Honey Barrel: Requesting INR to USD conversion from background script...');
-        showToast("Honey Barrel: Converting currency...", 2500, 'info');
+        // showToast("Honey Barrel: Converting currency...", 2500, 'info'); // Toast replaced by overlay
         try {
             chrome.runtime.sendMessage({
                 type: 'REQUEST_INR_CONVERSION',
@@ -383,25 +491,32 @@ function processAndSendData(name, priceInfo, rawPrice, config) {
             console.error("Honey Barrel: Error sending REQUEST_INR_CONVERSION message:", error);
             showToast("Honey Barrel: Currency conversion error.", 4000, 'error');
         }
-    } else {
-        // For USD, EUR, GBP, send directly for comparison
-        console.log('Honey Barrel: Sending BOTTLE_INFO to background script...');
-        showToast("Honey Barrel: Searching for matches...", 3000, 'info'); // Toast: Searching
+    } else if (priceInfo.currency === 'EUR') {
+        console.log('Honey Barrel: Requesting EUR to USD conversion from background script...');
+        // showToast("Honey Barrel: Converting currency...", 2500, 'info'); // Toast replaced by overlay
         try {
             chrome.runtime.sendMessage({
-              type: 'BOTTLE_INFO',
-              payload: {
-                name: name,
-                priceInfo: priceInfo, // Send the parsed object (USD, EUR, GBP)
-                normalizedName: normalizedName,
-                sourceSite: config.name
-              }
+                type: 'REQUEST_EUR_CONVERSION', // New message type for EUR
+                payload: {
+                    name: name,
+                    priceInfo: priceInfo, // Send original EUR price info
+                    normalizedName: normalizedName,
+                    sourceSite: config.name
+                }
             });
         } catch (error) {
-            console.error("Honey Barrel: Error sending BOTTLE_INFO message:", error);
-            // Potentially show an error toast if sending fails critically
-            // showToast("Honey Barrel: Communication error.", 4000, 'error');
+            console.error("Honey Barrel: Error sending REQUEST_EUR_CONVERSION message:", error);
+            showToast("Honey Barrel: Currency conversion error.", 4000, 'error');
         }
+    } else {
+        // For other currencies (USD, GBP, etc.), send the info directly
+        console.log('Honey Barrel: Currency does not require conversion. Sending BOTTLE_INFO directly.');
+        sendBottleInfoToBackground({
+            name: name,
+            priceInfo: priceInfo,
+            normalizedName: normalizedName,
+            sourceSite: config.name
+        });
     }
   } else {
       console.log('Honey Barrel: Not sending message because name or price info is missing.');
@@ -410,6 +525,31 @@ function processAndSendData(name, priceInfo, rawPrice, config) {
         showToast("Honey Barrel: Error extracting info.", 4000, 'error'); // Toast: Error extracting
       }
   }
+}
+
+// --- Debounced Processing Function ---
+// Debounce the function that processes extracted info and sends it to the background.
+// This prevents multiple rapid sends if extraction is triggered quickly.
+const debouncedProcessAndSendData = debounce(processAndSendData, 1000); // Wait 1 second after last call
+
+/**
+* Sends the final BOTTLE_INFO message to the background script.
+* This is called either directly for non-converted currencies or after receiving
+ * a CONVERTED_PRICE_INFO message.
+ * @param {object} payload - The payload containing name, priceInfo (USD), normalizedName, sourceSite.
+ */
+function sendBottleInfoToBackground(payload) {
+    console.log('Honey Barrel: Sending final BOTTLE_INFO to background script:', payload);
+    showToast("Honey Barrel: Searching for matches...", 3000, 'info'); // Toast: Searching
+    try {
+        chrome.runtime.sendMessage({
+            type: 'BOTTLE_INFO',
+            payload: payload
+        });
+    } catch (error) {
+        console.error("Honey Barrel: Error sending BOTTLE_INFO message:", error);
+        showToast("Honey Barrel: Communication error.", 4000, 'error');
+    }
 }
 
 
@@ -449,7 +589,8 @@ function extractProductInfoWithPolling(config) {
     const rawPrice = priceElement.textContent.trim();
     // console.log('Honey Barrel: Raw price text (initial find):', rawPrice); // Debug log removed
     const priceInfo = parsePrice(rawPrice);
-    processAndSendData(name, priceInfo, rawPrice, config);
+    // processAndSendData(name, priceInfo, rawPrice, config); // Original call
+    debouncedProcessAndSendData(name, priceInfo, rawPrice, config); // Use debounced version
   } else {
     // Price element not found, start polling
     console.log(`Honey Barrel: Price element (${config.priceSelector}) not found initially. Starting polling...`);
@@ -467,13 +608,15 @@ function extractProductInfoWithPolling(config) {
         const rawPrice = priceElement.textContent.trim();
         // console.log('Honey Barrel: Raw price text (found via polling):', rawPrice); // Debug log removed
         const priceInfo = parsePrice(rawPrice);
-        processAndSendData(name, priceInfo, rawPrice, config);
+        // processAndSendData(name, priceInfo, rawPrice, config); // Original call
+        debouncedProcessAndSendData(name, priceInfo, rawPrice, config); // Use debounced version
       } else if (attempts >= maxAttempts) {
         // Polling timed out
         clearInterval(intervalId);
         console.log(`Honey Barrel: Price element (${config.priceSelector}) not found after ${maxAttempts} polling attempts.`);
         showToast("Honey Barrel: Error extracting price.", 4000, 'error'); // Toast: Error extracting price
-        processAndSendData(name, null, null, config); // Process with null priceInfo and rawPrice
+        // processAndSendData(name, null, null, config); // Process with null priceInfo and rawPrice
+        debouncedProcessAndSendData(name, null, null, config); // Use debounced version
       }
     }, 500); // Poll every 500ms
   }
@@ -569,79 +712,99 @@ if (targetNode) {
  * @param {object} bottleInfo - The extracted information about the bottle from the current page.
  */
 function createComparisonOverlay(matches, bottleInfo) {
-    // Remove existing overlay first to prevent duplicates
-    const existingOverlay = document.getElementById('honey-barrel-overlay');
-    if (existingOverlay) {
-        existingOverlay.remove();
-    }
+    // Temporarily disconnect observer to prevent loop when updating overlay
+    observer.disconnect();
+    console.log("Honey Barrel: MutationObserver disconnected for overlay update.");
 
-    // Ensure we have the necessary data to build the overlay
-    const currentPriceInfo = parsePrice(bottleInfo.price); // Parse the raw price string
-    if (!matches || matches.length === 0 || !currentPriceInfo || typeof currentPriceInfo.value !== 'number') {
-        // console.log("Honey Barrel: Not creating overlay - missing matches or valid current price info."); // Debug log removed
-        return; // Exit if data is insufficient
-    }
+    try { // Use try...finally to ensure observer is reconnected
+        // Ensure we have the necessary data to build the overlay
+        const currentPriceInfo = parsePrice(bottleInfo.price); // Parse the raw price string
+        if (!matches || matches.length === 0 || !currentPriceInfo || typeof currentPriceInfo.value !== 'number') {
+            console.log("Honey Barrel: Not creating/updating overlay - missing matches or valid current price info.");
+            return; // Exit if data is insufficient
+        }
 
     const bestMatch = matches[0]; // Use the highest similarity match
     const baxusPrice = bestMatch.price; // Price from the Baxus listing
 
     // Ensure Baxus price is a valid number before proceeding
     if (typeof baxusPrice !== 'number') {
-        // console.log("Honey Barrel: Not creating overlay - Baxus price is not a valid number."); // Debug log removed
+        console.log("Honey Barrel: Not creating/updating overlay - Baxus price is not a valid number.");
         return;
     }
 
     const currentPrice = currentPriceInfo.value;
     const priceDiff = currentPrice - baxusPrice; // Calculate the difference
 
-    // --- Build Overlay DOM ---
-    const overlay = document.createElement('div');
-    overlay.id = 'honey-barrel-overlay';
-    // Apply styles using CSS variables defined in popup/shared styles (with fallbacks)
-    overlay.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background-color: var(--bg-color, #FDFBF5);
-        border: 1px solid var(--border-color, #EAE0D5);
-        padding: 18px;
-        z-index: 9999; /* High z-index to appear above most page elements */
-        font-family: var(--font-sans, sans-serif);
-        font-size: 14px;
-        box-shadow: var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.08));
-        border-radius: var(--radius, 12px);
-        color: var(--text-color, #5C3A21);
-        min-width: 240px;
-        max-width: 300px;
-        line-height: 1.5;
-        /* Transition for close animation */
-        transition: opacity 0.2s ease-out, transform 0.2s ease-out;
-        opacity: 0; /* Start hidden for fade-in */
-        transform: translateY(10px); /* Start slightly lower for slide-in */
-    `;
+    // --- Check for existing overlay ---
+    let overlay = document.getElementById('honey-barrel-overlay');
+    let isNewOverlay = false;
 
-    // Header Section
-    const header = document.createElement('div');
-    header.style.cssText = `
-        display: flex;
-        align-items: center;
-        margin-bottom: 12px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--border-color, #EAE0D5);
-    `;
-    const logoEmoji = document.createElement('span');
-    logoEmoji.textContent = '🍾'; // Simple emoji logo
-    logoEmoji.style.cssText = 'font-size: 24px; margin-right: 8px; line-height: 1;';
-    header.appendChild(logoEmoji);
+    if (!overlay) {
+        // If overlay doesn't exist (e.g., user closed preliminary one), create it from scratch
+        console.log("Honey Barrel: Preliminary overlay not found. Creating full comparison overlay.");
+        isNewOverlay = true;
+        overlay = document.createElement('div');
+        overlay.id = 'honey-barrel-overlay';
+        // Apply base styles
+        overlay.style.cssText = `
+            position: fixed; bottom: 20px; right: 20px; background-color: var(--bg-color, #FDFBF5);
+            border: 1px solid var(--border-color, #EAE0D5); padding: 18px; z-index: 9999;
+            font-family: var(--font-sans, sans-serif); font-size: 14px;
+            box-shadow: var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.08)); border-radius: var(--radius, 12px);
+            color: var(--text-color, #5C3A21); min-width: 240px; max-width: 300px; line-height: 1.5;
+            transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+            opacity: 0; transform: translateY(10px); /* Start hidden */
+        `;
 
-    const title = document.createElement('h3');
-    title.textContent = 'Honey Price Check';
-    title.style.cssText = 'margin: 0; font-size: 16px; font-weight: 600; color: var(--primary-color, #5C3A21);';
-    header.appendChild(title);
-    overlay.appendChild(header);
+        // Add Header Section (only if creating new overlay)
+        const header = document.createElement('div');
+        header.style.cssText = `display: flex; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color, #EAE0D5);`;
+        const logoEmoji = document.createElement('span');
+        logoEmoji.textContent = '🍾';
+        logoEmoji.style.cssText = 'font-size: 24px; margin-right: 8px; line-height: 1;';
+        header.appendChild(logoEmoji);
+        const title = document.createElement('h3');
+        title.textContent = 'Honey Price Check';
+        title.style.cssText = 'margin: 0; font-size: 16px; font-weight: 600; color: var(--primary-color, #5C3A21);';
+        header.appendChild(title);
+        overlay.appendChild(header);
+
+        // Add Close Button (only if creating new overlay)
+        const closeButton = document.createElement('button');
+        closeButton.innerHTML = '&times;';
+        closeButton.setAttribute('aria-label', 'Close price comparison');
+        closeButton.style.cssText = `position: absolute; top: 8px; right: 8px; background: transparent; border: none; font-size: 22px; font-weight: bold; cursor: pointer; color: var(--text-light, #8A7460); padding: 0 5px; line-height: 1; transition: color 0.2s ease;`;
+        closeButton.onmouseover = () => closeButton.style.color = 'var(--text-color, #5C3A21)';
+        closeButton.onmouseout = () => closeButton.style.color = 'var(--text-light, #8A7460)';
+        closeButton.onclick = () => {
+            overlay.style.opacity = '0';
+            overlay.style.transform = 'scale(0.9)';
+            setTimeout(() => overlay.remove(), 200);
+        };
+        overlay.appendChild(closeButton);
+
+    } else {
+        // If overlay exists, clear the "Checking..." message content
+        console.log("Honey Barrel: Updating existing preliminary overlay with comparison details.");
+        const checkingMessage = overlay.querySelector('#honey-barrel-checking-message');
+        if (checkingMessage) {
+            checkingMessage.remove();
+        }
+        // Ensure any old comparison content is removed before adding new
+        const oldPriceSection = overlay.querySelector('.honey-barrel-price-section');
+        const oldSavingsDiv = overlay.querySelector('.honey-barrel-savings-div');
+        const oldBaxusLink = overlay.querySelector('.honey-barrel-baxus-link');
+        if (oldPriceSection) oldPriceSection.remove();
+        if (oldSavingsDiv) oldSavingsDiv.remove();
+        if (oldBaxusLink) oldBaxusLink.remove();
+    }
+
+    // --- Build and Append/Update Content ---
 
     // Price Comparison Section
     const priceSection = document.createElement('div');
+    priceSection.className = 'honey-barrel-price-section'; // Add class for potential removal later
     priceSection.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;';
 
     // Current Site Price Display
@@ -673,87 +836,51 @@ function createComparisonOverlay(matches, bottleInfo) {
     overlay.appendChild(priceSection);
 
     // Savings Message (Conditional)
-    // Only show if the price on Baxus is lower (difference is positive)
-    if (priceDiff > 0.01) { // Use a small threshold for floating point comparison
+    if (priceDiff > 0.01) {
         const savingsDiv = document.createElement('div');
+        savingsDiv.className = 'honey-barrel-savings-div'; // Add class
         savingsDiv.textContent = `Save $${priceDiff.toFixed(2)} on BAXUS!`;
-        savingsDiv.style.cssText = `
-            text-align: center;
-            margin-bottom: 15px;
-            padding: 8px;
-            border-radius: var(--radius, 12px);
-            font-weight: 600;
-            background-color: var(--savings-bg, #E8F5E9); /* Greenish background */
-            color: var(--savings-color-text, #388E3C); /* Dark green text */
-            border: 1px solid var(--border-color, #EAE0D5);
-        `;
+        savingsDiv.style.cssText = `text-align: center; margin-bottom: 15px; padding: 8px; border-radius: var(--radius, 12px); font-weight: 600; background-color: var(--savings-bg, #E8F5E9); color: var(--savings-color-text, #388E3C); border: 1px solid var(--border-color, #EAE0D5);`;
         overlay.appendChild(savingsDiv);
     }
-    // Note: Messages for "costs more" or "same price" are omitted for simplicity.
 
     // BAXUS Link Button
     const baxusLink = document.createElement('a');
-    baxusLink.href = `https://baxus.co/asset/${bestMatch.id}`; // Link to the specific asset
+    baxusLink.className = 'honey-barrel-baxus-link'; // Add class
+    baxusLink.href = `https://baxus.co/asset/${bestMatch.id}`;
     baxusLink.textContent = 'View on BAXUS →';
-    baxusLink.target = '_blank'; // Open in a new tab
-    baxusLink.rel = 'noopener noreferrer'; // Security best practice for target="_blank"
-    baxusLink.style.cssText = `
-        display: block;
-        text-align: center;
-        background-color: var(--button-bg, #1C6D72);
-        color: var(--button-text, #FDFBF5);
-        padding: 10px 15px;
-        border-radius: var(--radius, 12px);
-        text-decoration: none;
-        font-weight: 600;
-        transition: background-color 0.2s ease;
-        margin-top: 10px;
-        border: none;
-    `;
-    // Hover effect using JS (could also be done with CSS if styles were in a sheet)
+    baxusLink.target = '_blank';
+    baxusLink.rel = 'noopener noreferrer';
+    baxusLink.style.cssText = `display: block; text-align: center; background-color: var(--button-bg, #1C6D72); color: var(--button-text, #FDFBF5); padding: 10px 15px; border-radius: var(--radius, 12px); text-decoration: none; font-weight: 600; transition: background-color 0.2s ease; margin-top: 10px; border: none;`;
     const buttonBg = 'var(--button-bg, #1C6D72)';
     const buttonHoverBg = 'var(--button-hover-bg, #458D91)';
     baxusLink.onmouseover = () => baxusLink.style.backgroundColor = buttonHoverBg;
     baxusLink.onmouseout = () => baxusLink.style.backgroundColor = buttonBg;
     overlay.appendChild(baxusLink);
 
-    // Close Button
-    const closeButton = document.createElement('button');
-    closeButton.innerHTML = '&times;'; // 'X' symbol
-    closeButton.setAttribute('aria-label', 'Close price comparison'); // Accessibility
-    closeButton.style.cssText = `
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        background: transparent;
-        border: none;
-        font-size: 22px;
-        font-weight: bold;
-        cursor: pointer;
-        color: var(--text-light, #8A7460);
-        padding: 0 5px;
-        line-height: 1;
-        transition: color 0.2s ease;
-    `;
-    closeButton.onmouseover = () => closeButton.style.color = 'var(--text-color, #5C3A21)'; // Darken on hover
-    closeButton.onmouseout = () => closeButton.style.color = 'var(--text-light, #8A7460)';
-    // Click handler to close and remove the overlay with animation
-    closeButton.onclick = () => {
-        overlay.style.opacity = '0';
-        overlay.style.transform = 'scale(0.9)'; // Optional shrink effect
-        setTimeout(() => overlay.remove(), 200); // Remove after transition (matches transition duration)
-    };
-    overlay.appendChild(closeButton);
-
-    // --- Append and Animate In ---
-    document.body.appendChild(overlay);
-    // console.log("Honey Barrel: Comparison overlay created."); // Debug log removed
-
-    // Trigger fade-in/slide-in animation
-    requestAnimationFrame(() => {
+    // --- Append and Animate In (only if it's a new overlay) ---
+    if (isNewOverlay) {
+        document.body.appendChild(overlay);
+        // Trigger fade-in/slide-in animation
+        requestAnimationFrame(() => {
+            overlay.style.opacity = '1';
+            overlay.style.transform = 'translateY(0)';
+        });
+    } else {
+        // If updating, ensure it's visible (in case it faded out for some reason)
         overlay.style.opacity = '1';
         overlay.style.transform = 'translateY(0)';
-    });
+    }
+    } finally {
+        // Reconnect observer regardless of success or failure within try block
+        // Ensure targetNode and observerConfig are accessible (they should be from the outer scope)
+        if (targetNode && observerConfig) {
+            observer.observe(targetNode, observerConfig);
+            console.log("Honey Barrel: MutationObserver reconnected after overlay update.");
+        } else {
+            console.error("Honey Barrel: Could not reconnect observer - targetNode or observerConfig missing.");
+        }
+    }
 }
 
 
@@ -786,6 +913,62 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             // console.log("Honey Barrel (content): Received DISPLAY_OVERLAY message with matches:", request.matches); // Debug log removed
             if (request.matches && request.matches.length > 0) {
                 // Use the globally stored currentBottleInfo along with the received matches.
+// --- Message Listener (from Background Script) ---
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log(`[Honey Barrel CS] Message received: Type=${request.type}`);
+
+  switch (request.type) {
+    case 'CONVERTED_PRICE_INFO':
+      // Background script has sent back the price converted to USD.
+      // Now we can send the final BOTTLE_INFO message.
+      console.log('[Honey Barrel CS] Received CONVERTED_PRICE_INFO from background:', request.payload);
+      if (request.payload) {
+        sendBottleInfoToBackground(request.payload);
+      } else {
+        console.error('[Honey Barrel CS] CONVERTED_PRICE_INFO message received without payload.');
+        showToast("Honey Barrel: Currency conversion failed.", 4000, 'error');
+      }
+      break; // Important: break after handling the case
+
+    case 'DISPLAY_OVERLAY':
+      // Background script has sent matching listings. Display them.
+      console.log('[Honey Barrel CS] Received DISPLAY_OVERLAY from background:', request.matches);
+      if (request.matches && request.matches.length > 0) {
+        // Use the globally stored currentBottleInfo for context
+        if (currentBottleInfo.name && currentBottleInfo.normalizedName) {
+            // Disconnect observer before updating DOM, reconnect after
+            observer.disconnect();
+            console.log("Honey Barrel: MutationObserver disconnected for DISPLAY_OVERLAY.");
+            try {
+                createComparisonOverlay(request.matches, currentBottleInfo);
+                showToast(`Honey Barrel: Found ${request.matches.length} potential match(es)!`, 4000, 'success');
+            } finally {
+                if (targetNode && observerConfig) {
+                    observer.observe(targetNode, observerConfig);
+                    console.log("Honey Barrel: MutationObserver reconnected after DISPLAY_OVERLAY.");
+                } else {
+                     console.error("Honey Barrel: Could not reconnect observer after DISPLAY_OVERLAY - targetNode or observerConfig missing.");
+                }
+            }
+        } else {
+            console.warn('[Honey Barrel CS] Cannot display overlay: currentBottleInfo is incomplete.');
+            showToast("Honey Barrel: Error displaying matches.", 4000, 'error');
+        }
+      } else {
+        console.log('[Honey Barrel CS] No matches found or provided for overlay.');
+        showToast("Honey Barrel: No similar listings found.", 3000, 'info');
+      }
+      break; // Important: break after handling the case
+
+    default:
+      console.log(`[Honey Barrel CS] Received unhandled message type: ${request.type}. Ignoring.`);
+      break;
+  }
+
+  // Return false to indicate we are not sending an asynchronous response from this listener.
+  // (Responses are handled by sending new messages like BOTTLE_INFO if needed).
+  return false;
+});
                 createComparisonOverlay(request.matches, currentBottleInfo);
             } else {
                 // console.log("Honey Barrel (content): No matches received, not displaying overlay."); // Debug log removed
